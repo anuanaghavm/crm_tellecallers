@@ -3,7 +3,6 @@ from django.db import models
 class Branch(models.Model):
 
     branch_name = models.CharField(max_length=255)  # Branch Name
-    branch_code = models.CharField(max_length=50, unique=True)  # Short identifier, unique
     address = models.TextField()  # Address
     city = models.CharField(max_length=100)  # City
     state = models.CharField(max_length=100)  # State

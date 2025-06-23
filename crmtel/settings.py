@@ -73,7 +73,13 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'crmtel.wsgi.application'
+AUTH_USER_MODEL = 'login.Account'
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
