@@ -19,6 +19,13 @@ class Lead(models.Model):
     ]
 
     name = models.CharField(max_length=100)
+    tellecaller = models.ForeignKey(
+        'tellecaller.Telecaller', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='leads'
+    )   
     email = models.EmailField()
     phone = models.CharField(max_length=15)
     source = models.CharField(max_length=50, choices=SOURCE_CHOICES)
