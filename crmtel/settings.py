@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'login',
     'roles',
     'branch',
+    'lead',
     'tellecaller'
 ]
 

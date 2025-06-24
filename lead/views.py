@@ -5,12 +5,13 @@ from .serializers import LeadSerializer
 class LeadListCreateView(generics.ListCreateAPIView):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
-    permission_classes = [permissions.IsAuthenticated]  # or [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]  # Or use AllowAny if public
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user if self.request.user.is_authenticated else None)
+        serializer.save()  # ✅ No user passed
+
 
 class LeadRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
-    permission_classes = [permissions.IsAuthenticated]  # or [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated]  # Or use AllowAny

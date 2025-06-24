@@ -23,4 +23,6 @@ urlpatterns = [
     path("api/",include("roles.urls")),
     path('api/',include("branch.urls")),
     path('api/',include("tellecaller.urls")),
+    path('api/',include("lead.urls")),
+
 ]
