@@ -5,4 +5,4 @@ class BranchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Branch
-        fields = ['id', 'branch_name','address', 'city', 'state', 'country', 'email', 'contact']
+        fields = ['id', 'branch_name','address', 'city',  'email', 'contact']

@@ -10,44 +10,25 @@ class BranchSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TelecallerSerializer(serializers.ModelSerializer):
-    created_by = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all(), required=False)
-    branch_name = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, required=True)
-    username = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = Telecaller
         fields = [
-            'id', 'account', 'email', 'name', 'contact', 'address', 'role', 'branch', 'branch_name',
-            'job_type', 'status', 'created_date', 'created_by', 'target',
-            'password', 'username'  # for Account
+            'id', 'account', 'email', 'name', 'contact', 'address', 'role', 'branch', 'status', 'created_date', 'created_by',
+            'password'
         ]
         read_only_fields = ['account', 'created_date']
 
-    def get_branch_name(self, obj):
-        return obj.branch.branch_name if obj.branch else None
-
     def create(self, validated_data):
         password = validated_data.pop('password')
-        username = validated_data.pop('username')
         email = validated_data.get('email')
 
         # Create Account
-        account = Account.objects.create(
-            username=username,
+        account = Account.objects.create_user(
             email=email,
-            password=make_password(password),
-            role=validated_data['role']  # or validated_data.pop('role')
+            password=password,
+            role=validated_data['role']
         )
-
         validated_data['account'] = account
         return Telecaller.objects.create(**validated_data)
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        if instance.created_by:
-            representation["created_by"] = {
-                "id": instance.created_by.id,
-                "email": instance.created_by.email,
-            }
-        return representation

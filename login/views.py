@@ -6,6 +6,9 @@ from django.contrib.auth import authenticate
 from .models import Account
 from roles.models import Role
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate, get_user_model
+
+User = get_user_model()
 
 class RegisterView(APIView):
     def post(self, request):
@@ -36,17 +39,24 @@ class LoginView(APIView):
         if not email or not password:
             return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = authenticate(email=email, password=password)
-
-        if user is None:
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.check_password(password):
+            return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.is_active:
+            return Response({'error': 'Account is deactivated'}, status=status.HTTP_403_FORBIDDEN)
 
         refresh = RefreshToken.for_user(user)
         return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
             'user': {
                 'email': user.email,
                 'role': user.role.name
-            }
+            },
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            
         }, status=status.HTTP_200_OK)
