@@ -3,7 +3,7 @@ from django.db import models
 class Role(models.Model):
     ROLE_CHOICES = [
         ('Admin', 'Admin'),
-        ('Tellecaller', 'Tellecaller'),
+        ('Telecaller', 'Telecaller'),
         # ('Branch Manager', 'Branch Manager'),
     ]
     

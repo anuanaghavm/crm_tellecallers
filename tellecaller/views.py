@@ -42,6 +42,7 @@ class TelecallerListCreateView(APIView):
         if serializer.is_valid():
             telecaller = serializer.save()
             return Response({
+                "code": 201,
                 "message": "Telecaller created successfully",
                 "data": TelecallerSerializer(telecaller).data
             }, status=status.HTTP_201_CREATED)
@@ -59,24 +60,55 @@ class TelecallerDetailView(APIView):
     def get(self, request, pk):
         telecaller = self.get_object(pk)
         if not telecaller:
-            return Response({'error': 'Telecaller not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "code": 404,
+                "message": "Telecaller not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
         serializer = TelecallerSerializer(telecaller)
-        return Response(serializer.data)
+        return Response({
+            "code": 200,
+            "message": "Telecaller fetched successfully",
+            "data": serializer.data
+        }, status=status.HTTP_200_OK)
+
 
     def patch(self, request, pk):
         telecaller = self.get_object(pk)
         if not telecaller:
-            return Response({'error': 'Telecaller not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "code": 404,
+                "message": "Telecaller not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
         serializer = TelecallerSerializer(telecaller, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "code": 200,
+                "message": "Telecaller updated successfully",
+                "data": serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        return Response({
+            "code": 400,
+            "message": "Invalid data",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
 
     def delete(self, request, pk):
         telecaller = self.get_object(pk)
         if not telecaller:
-            return Response({'error': 'Telecaller not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({
+                "code": 404,
+                "message": "Telecaller not found"
+            }, status=status.HTTP_404_NOT_FOUND)
+
         telecaller.delete()
-        return Response({'message': 'Telecaller deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+        return Response({
+            "code": 204,
+            "message": "Telecaller deleted successfully"
+        }, status=status.HTTP_204_NO_CONTENT)
+
 

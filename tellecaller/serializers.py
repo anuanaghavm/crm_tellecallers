@@ -25,7 +25,7 @@ class TelecallerSerializer(serializers.ModelSerializer):
         email = validated_data.get('email')
 
         # Create Account
-        account = Account.objects.create_user(
+        account = Account.objects.create(
             email=email,
             password=password,
             role=validated_data['role']
