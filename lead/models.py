@@ -18,6 +18,8 @@ class Lead(models.Model):
         ('Closed', 'Closed'),
         ('Make_a_call', 'Make a Call'),
         ('Fix Walk in', 'Fix Walk in'),
+        ('insterested', 'Interested'),
+        ('Not Interested', 'Not Interested'),
     ]
 
     name = models.CharField(max_length=100)
