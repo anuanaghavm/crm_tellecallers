@@ -6,5 +6,5 @@ from .views import (
 
 urlpatterns = [
     path('telecallers/', TelecallerListCreateView.as_view(), name='telecaller-list-create'),
-    path('telecallers/<int:pk>/', TelecallerDetailView.as_view(), name='telecaller-detail'),
+    path('telecallers/<uuid:uuid>/', TelecallerDetailView.as_view(), name='telecaller-detail'),
 ]

@@ -1,37 +1,32 @@
-# login/models.py
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 from roles.models import Role
-import uuid
 
-class UserManager(BaseUserManager):
+class AccountManager(BaseUserManager):
     def create_user(self, email, password=None, role=None):
         if not email:
             raise ValueError("Users must have an email")
         email = self.normalize_email(email)
         user = self.model(email=email, role=role)
         user.set_password(password)
+        user.raw_password = password  # ⚠️ Only for dev
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, password=None, role=None):
-        user = self.create_user(email=email, password=password, role=role)
-        user.is_superuser = True
-        user.is_staff = True
-        user.save(using=self._db)
-        return user
+    def create_superuser(self, email, password=None):
+        from roles.models import Role
+        admin_role, _ = Role.objects.get_or_create(name="Admin")
+        return self.create_user(email=email, password=password, role=admin_role)
 
-class Account(AbstractBaseUser, PermissionsMixin):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
+class Account(AbstractBaseUser):
+    email = models.EmailField(unique=True, max_length=255)
+    password = models.CharField(max_length=128)
+    raw_password = models.CharField(max_length=128, blank=True, null=True)
     role = models.ForeignKey(Role, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)
-    is_staff = models.BooleanField(default=False)
 
-    objects = UserManager()
-
+    objects = AccountManager()
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['role']
 
     def __str__(self):
         return self.email
