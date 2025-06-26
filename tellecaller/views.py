@@ -6,6 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from .models import Telecaller
 from .serializers import TelecallerSerializer
 from roles.models import Role
+from rest_framework_simplejwt.tokens import RefreshToken
 
 class TelecallerPagination(PageNumberPagination):
     page_size = 10
@@ -41,10 +42,18 @@ class TelecallerListCreateView(APIView):
         serializer = TelecallerSerializer(data=data)
         if serializer.is_valid():
             telecaller = serializer.save()
+
+            # Generate JWT token for the linked account
+            refresh = RefreshToken.for_user(telecaller.account)
+
             return Response({
                 "code": 201,
                 "message": "Telecaller created successfully",
-                "data": TelecallerSerializer(telecaller).data
+                "data": TelecallerSerializer(telecaller).data,
+                "token": {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                },
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -110,5 +119,4 @@ class TelecallerDetailView(APIView):
             "code": 204,
             "message": "Telecaller deleted successfully"
         }, status=status.HTTP_204_NO_CONTENT)
-
 

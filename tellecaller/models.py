@@ -3,8 +3,10 @@ from roles.models import Role
 from login.models import Account
 from branch.models import Branch
 from django.utils.timezone import now
+import uuid
 
 class Telecaller(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)  
     account = models.OneToOneField(Account, on_delete=models.CASCADE, related_name="telecaller_user")
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
@@ -18,3 +20,4 @@ class Telecaller(models.Model):
 
     def __str__(self):
         return self.name
+

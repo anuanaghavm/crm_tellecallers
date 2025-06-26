@@ -49,14 +49,45 @@ class BranchListCreateView(ListCreateAPIView):
 
 
 class BranchRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
-    """
-    Handles retrieving, updating, and deleting a branch.
-    """
     queryset = Branch.objects.all()
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         return BranchSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "code": 200,
+            "message": "Branch retrieved successfully",
+            "data": serializer.data
+        })
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "code": 200,
+                "message": "Branch updated successfully",
+                "data": serializer.data
+            })
+        return Response({
+            "code": 400,
+            "message": "Invalid data",
+            "errors": serializer.errors
+        }, status=400)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "code": 204,
+            "message": "Branch deleted successfully"
+        }, status=204)
     
 class BranchTotalCountAPIView(APIView):
     permission_classes = [IsAuthenticated]

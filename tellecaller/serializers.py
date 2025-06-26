@@ -15,10 +15,12 @@ class TelecallerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Telecaller
         fields = [
-            'id', 'account', 'email', 'name', 'contact', 'address', 'role', 'branch', 'status', 'created_date', 'created_by',
+            'id', 'uuid', 'account', 'email', 'name', 'contact', 'address',
+            'role', 'branch', 'status', 'created_date', 'created_by',
             'password'
         ]
-        read_only_fields = ['account', 'created_date']
+        read_only_fields = ['id', 'uuid', 'account', 'created_date']
+
 
     def create(self, validated_data):
         password = validated_data.pop('password')
