@@ -2,9 +2,11 @@ from django.db import models
 from login.models import Account
 from roles.models import Role
 from django.utils.timezone import now
+from branch.models import Branch
 
 class Telecaller(models.Model):
     account = models.OneToOneField(Account, on_delete=models.CASCADE)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True) 
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
     contact = models.CharField(max_length=15)
