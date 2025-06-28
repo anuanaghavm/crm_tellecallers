@@ -7,7 +7,6 @@ urlpatterns = [
     path('enquiries/walk-in-list/', WalkInEnquiryListView.as_view(), name='walk-in-enquiries-list'),
     path('enquiries/follow-up/', FollowUpEnquiryListView.as_view(), name='follow-up-enquiry-list'),
     path('enquiries/closed/', ClosedEnquiryListView.as_view(), name='closed-enquiry-list'),
-
     path('enquiries/active/', ActiveEnquiryListView.as_view(), name='active-enquiries'),
 
 ]

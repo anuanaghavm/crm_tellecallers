@@ -1,9 +1,8 @@
-from rest_framework import status
+from rest_framework import status, filters as drf_filters
 from rest_framework.response import Response
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.pagination import PageNumberPagination
-from rest_framework import filters as drf_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as django_filters
 from .models import Enquiry
@@ -28,208 +27,8 @@ class CustomPagination(PageNumberPagination):
             }
         })
 
-
-
-class WalkInListEnquiryFilter(django_filters.FilterSet):
-    start_date      = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
-    end_date        = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
-    enquiry_source  = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
-    enquiry_status  = django_filters.CharFilter(field_name='enquiry_status', lookup_expr='iexact')
-    telecaller_id   = django_filters.NumberFilter(field_name='telecaller_id')
-    branch_id       = django_filters.NumberFilter(field_name='branch_id')
-
-    # ——— New for filtering by branch name ———
-    branch_name     = django_filters.CharFilter(field_name='branch__branch_name', lookup_expr='icontains')
-
-    # ——— (Optional) If you want to filter by telecaller name too ———
-    telecaller_name = django_filters.CharFilter(field_name='telecaller__name', lookup_expr='icontains')
-
-    class Meta:
-        model = Enquiry
-        fields = [
-            'enquiry_status',
-            'enquiry_source',
-            'branch_id',      # filtering by exact branch ID
-            'branch_name',    # filtering by partial branch name
-            'telecaller_id',
-            'telecaller_name',
-            'start_date',
-            'end_date',
-        ]
-
-# ✅ FilterSet for Active Enquiries
-class ActiveEnquiryFilter(django_filters.FilterSet):
-    start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
-    end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
-    enquiry_source = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
-    branch = django_filters.NumberFilter(field_name='branch_id')
-
-    class Meta:
-        model = Enquiry
-        fields = ['enquiry_source', 'branch', 'start_date', 'end_date']
-
-# ✅ Enquiry List & Create View (only Active enquiries)
-class EnquiryListCreateView(ListCreateAPIView):
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = CustomPagination
-
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-    filterset_class = ActiveEnquiryFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
-
-    def get_queryset(self):
-        return Enquiry.objects.filter(enquiry_status='Active').order_by('-created_at')
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return Response({
-            "code": 201,
-            "message": "Enquiry created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
-
-# ✅ Detail View (with all enquiries — no status filtering)
-class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
-    queryset = Enquiry.objects.all()
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-
-
-
-
-# ✅ Walk-in Enquiry List View
-class WalkInEnquiryListView(ListCreateAPIView):
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = CustomPagination
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-    filterset_class = WalkInListEnquiryFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
-
-    def get_queryset(self):
-        # Always start with walk_in_list status
-        base_qs = Enquiry.objects.filter(enquiry_status='walk_in_list')
-        return base_qs.order_by('-created_at')
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return Response({
-            "code": 201,
-            "message": "Walk-in enquiry created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
-
-
-
-
-class FollowUpEnquiryListView(ListCreateAPIView):
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = CustomPagination
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-    filterset_class = WalkInListEnquiryFilter  # Reuse existing filter
-    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
-
-    def get_queryset(self):
-        return Enquiry.objects.filter(enquiry_status='Follow Up').order_by('-created_at')
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return Response({
-            "code": 201,
-            "message": "Follow-up enquiry created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
-
-
-
-class FollowUpEnquiryFilter(django_filters.FilterSet):
-    start_date      = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
-    end_date        = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
-    enquiry_source  = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
-    branch_id       = django_filters.NumberFilter(field_name='branch_id')
-    branch_name     = django_filters.CharFilter(field_name='branch__branch_name', lookup_expr='icontains')
-    telecaller_id   = django_filters.NumberFilter(field_name='telecaller_id')
-    telecaller_name = django_filters.CharFilter(field_name='telecaller__name', lookup_expr='icontains')
-
-    class Meta:
-        model = Enquiry
-        fields = [
-            'enquiry_source',
-            'branch_id',
-            'branch_name',
-            'telecaller_id',
-            'telecaller_name',
-            'start_date',
-            'end_date',
-        ]
-# ✅ Closed Enquiry List View
-class ClosedEnquiryListView(ListCreateAPIView):
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = CustomPagination
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-
-    # ✅ You can reuse the filter class
-    filterset_class = FollowUpEnquiryFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
-
-    def get_queryset(self):
-        return Enquiry.objects.filter(enquiry_status='Closed').order_by('-created_at')
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return Response({
-            "code": 201,
-            "message": "Closed enquiry created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
-class ClosedEnquiryFilter(django_filters.FilterSet):
-    start_date      = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
-    end_date        = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
-    enquiry_source  = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
-    branch_id       = django_filters.NumberFilter(field_name='branch_id')
-    branch_name     = django_filters.CharFilter(field_name='branch__branch_name', lookup_expr='icontains')
-    telecaller_id   = django_filters.NumberFilter(field_name='telecaller_id')
-    telecaller_name = django_filters.CharFilter(field_name='telecaller__name', lookup_expr='icontains')
-
-    class Meta:
-        model = Enquiry
-        fields = [
-            'enquiry_source',
-            'branch_id',
-            'branch_name',
-            'telecaller_id',
-            'telecaller_name',
-            'start_date',
-            'end_date',
-        ]
-class ActiveEnquiryListView(ListCreateAPIView):
-    serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = CustomPagination
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-
-    # ✅ Reuse the same filter used in Closed & Follow-Up views
-    filterset_class = FollowUpEnquiryFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
-
-    def get_queryset(self):
-        return Enquiry.objects.filter(enquiry_status='Active').order_by('-created_at')
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        return Response({
-            "code": 201,
-            "message": "Active enquiry created successfully",
-            "data": response.data
-        }, status=status.HTTP_201_CREATED)
-class ActiveEnquiryFilter(django_filters.FilterSet):
+# ✅ Shared FilterSet for Walk-in, Follow-up, Closed, Active
+class EnquiryBaseFilter(django_filters.FilterSet):
     start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
     enquiry_source = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
@@ -249,3 +48,66 @@ class ActiveEnquiryFilter(django_filters.FilterSet):
             'start_date',
             'end_date',
         ]
+
+# ✅ Base View to reduce duplication
+class BaseEnquiryListCreateView(ListCreateAPIView):
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_class = EnquiryBaseFilter
+    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
+    enquiry_status = None  # To be set in subclasses
+
+    def get_queryset(self):
+        return Enquiry.objects.filter(enquiry_status=self.enquiry_status).order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({
+            "code": 201,
+            "message": f"{self.enquiry_status} enquiry created successfully",
+            "data": response.data
+        }, status=status.HTTP_201_CREATED)
+
+# ✅ Individual Views
+class WalkInEnquiryListView(BaseEnquiryListCreateView):
+    enquiry_status = 'walk_in_list'
+
+class FollowUpEnquiryListView(BaseEnquiryListCreateView):
+    enquiry_status = 'Follow Up'
+
+class ClosedEnquiryListView(BaseEnquiryListCreateView):
+    enquiry_status = 'Closed'
+
+class ActiveEnquiryListView(BaseEnquiryListCreateView):
+    enquiry_status = 'Active'
+
+# ✅ Separate List View for All Enquiries (only Active by default)
+class EnquiryListCreateView(ListCreateAPIView):
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_fields = ['enquiry_source', 'branch_id']  # Minimal fields
+    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
+
+    def get_queryset(self):
+        return Enquiry.objects.filter(enquiry_status='Active').order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({
+            "code": 201,
+            "message": "Enquiry created successfully",
+            "data": response.data
+        }, status=status.HTTP_201_CREATED)
+
+# ✅ Retrieve, Update, Destroy View
+class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Enquiry.objects.all()
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
