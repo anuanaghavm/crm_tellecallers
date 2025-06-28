@@ -1,9 +1,11 @@
 from django.urls import path
-from .views import EnquiryListCreateView, EnquiryDetailView,WalkInEnquiryListView
+from .views import EnquiryListCreateView, EnquiryDetailView,WalkInEnquiryListView,FollowUpEnquiryListView
 
 urlpatterns = [
     path('enquiries/', EnquiryListCreateView.as_view(), name='enquiry-list-create'),
     path('enquiries/<int:pk>/', EnquiryDetailView.as_view(), name='enquiry-detail'),
     path('enquiries/walk-in-list/', WalkInEnquiryListView.as_view(), name='walk-in-enquiries-list'),
+    path('enquiries/follow-up/', FollowUpEnquiryListView.as_view(), name='follow-up-enquiry-list'),
+
 
 ]

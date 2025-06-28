@@ -123,3 +123,48 @@ class WalkInEnquiryListView(ListCreateAPIView):
             "message": "Walk-in enquiry created successfully",
             "data": response.data
         }, status=status.HTTP_201_CREATED)
+
+
+
+
+class FollowUpEnquiryListView(ListCreateAPIView):
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = CustomPagination
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_class = WalkInListEnquiryFilter  # Reuse existing filter
+    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
+
+    def get_queryset(self):
+        return Enquiry.objects.filter(enquiry_status='Follow Up').order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        return Response({
+            "code": 201,
+            "message": "Follow-up enquiry created successfully",
+            "data": response.data
+        }, status=status.HTTP_201_CREATED)
+
+
+
+class FollowUpEnquiryFilter(django_filters.FilterSet):
+    start_date      = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
+    end_date        = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
+    enquiry_source  = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
+    branch_id       = django_filters.NumberFilter(field_name='branch_id')
+    branch_name     = django_filters.CharFilter(field_name='branch__branch_name', lookup_expr='icontains')
+    telecaller_id   = django_filters.NumberFilter(field_name='telecaller_id')
+    telecaller_name = django_filters.CharFilter(field_name='telecaller__name', lookup_expr='icontains')
+
+    class Meta:
+        model = Enquiry
+        fields = [
+            'enquiry_source',
+            'branch_id',
+            'branch_name',
+            'telecaller_id',
+            'telecaller_name',
+            'start_date',
+            'end_date',
+        ]
