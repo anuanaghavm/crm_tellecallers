@@ -1,15 +1,16 @@
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import filters as drf_filters
+from django_filters.rest_framework import DjangoFilterBackend
+from django_filters import rest_framework as django_filters
+from .models import Enquiry
+from .serializers import EnquirySerializer
 
-from .models import Lead, CallRegister
-from .serializers import LeadSerializer, CallRegisterSerializer
-
-
-# ---------- Pagination ----------
-class LeadPagination(PageNumberPagination):
+# ✅ Custom Pagination
+class CustomPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'limit'
     max_page_size = 100
@@ -17,7 +18,7 @@ class LeadPagination(PageNumberPagination):
     def get_paginated_response(self, data):
         return Response({
             "code": 200,
-            "status": "success",
+            "message": "",
             "data": data,
             "pagination": {
                 "total": self.page.paginator.count,
@@ -28,121 +29,84 @@ class LeadPagination(PageNumberPagination):
         })
 
 
-# ---------- Lead Views ----------
-class LeadListCreateView(ListCreateAPIView):
-    queryset = Lead.objects.all()
-    serializer_class = LeadSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = LeadPagination
+
+class WalkInEnquiryFilter(django_filters.FilterSet):
+    start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
+    end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
+    enquiry_source = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
+    telecaller_id = django_filters.NumberFilter(field_name='telecaller_id')
+    branch = django_filters.NumberFilter(field_name='branch_id')
+
+    class Meta:
+        model = Enquiry
+        fields = ['enquiry_source', 'branch', 'telecaller_id', 'start_date', 'end_date']
+
+
+
+
+# ✅ FilterSet for Active Enquiries
+class ActiveEnquiryFilter(django_filters.FilterSet):
+    start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
+    end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
+    enquiry_source = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
+    branch = django_filters.NumberFilter(field_name='branch_id')
+
+    class Meta:
+        model = Enquiry
+        fields = ['enquiry_source', 'branch', 'start_date', 'end_date']
+
+# ✅ Enquiry List & Create View (only Active enquiries)
+class EnquiryListCreateView(ListCreateAPIView):
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = CustomPagination
+
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_class = ActiveEnquiryFilter
+    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
 
     def get_queryset(self):
-        queryset = Lead.objects.all().order_by('-id')
-        search_query = self.request.query_params.get('search', '')
-        if search_query:
-            queryset = queryset.filter(name__istartswith=search_query)
-        return queryset
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return Response({
-            "code": 201,
-            "status": "success",
-            "message": "Lead created successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
+        return Enquiry.objects.filter(enquiry_status='Active').order_by('-created_at')
 
     def perform_create(self, serializer):
-        serializer.save()
-
-
-class LeadRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
-    queryset = Lead.objects.all()
-    serializer_class = LeadSerializer
-    permission_classes = [IsAuthenticated]
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response({
-            "code": 200,
-            "status": "success",
-            "data": serializer.data
-        })
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response({
-            "code": 200,
-            "status": "success",
-            "message": "Lead updated successfully",
-            "data": serializer.data
-        })
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response({
-            "code": 204,
-            "status": "success",
-            "message": "Lead deleted successfully"
-        }, status=status.HTTP_204_NO_CONTENT)
-
-# ---------- Call Register Views ----------
-class CallRegisterListCreateView(ListCreateAPIView):
-    queryset = CallRegister.objects.all()
-    serializer_class = CallRegisterSerializer
-    permission_classes = [IsAuthenticated]
+        serializer.save(created_by=self.request.user)
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        response = super().create(request, *args, **kwargs)
         return Response({
             "code": 201,
-            "status": "success",
-            "message": "Call log created successfully",
-            "data": serializer.data
+            "message": "Enquiry created successfully",
+            "data": response.data
         }, status=status.HTTP_201_CREATED)
 
+# ✅ Detail View (with all enquiries — no status filtering)
+class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Enquiry.objects.all()
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
-class CallRegisterRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
-    queryset = CallRegister.objects.all()
-    serializer_class = CallRegisterSerializer
-    permission_classes = [IsAuthenticated]
 
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
+
+
+
+# ✅ Walk-in Enquiry List View
+class WalkInEnquiryListView(ListCreateAPIView):
+    serializer_class = EnquirySerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = CustomPagination
+
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    filterset_class = WalkInEnquiryFilter
+    search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
+
+    def get_queryset(self):
+        # Return only walk-in enquiries (you can customize the condition if needed)
+        return Enquiry.objects.filter(enquiry_source__iexact='Walk-In').order_by('-created_at')
+
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
         return Response({
-            "code": 200,
-            "status": "success",
-            "data": serializer.data
-        })
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response({
-            "code": 200,
-            "status": "success",
-            "message": "Call updated successfully",
-            "data": serializer.data
-        })
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        self.perform_destroy(instance)
-        return Response({
-            "code": 204,
-            "status": "success",
-            "message": "Call deleted successfully"
-        }, status=status.HTTP_204_NO_CONTENT)
+            "code": 201,
+            "message": "Walk-in enquiry created successfully",
+            "data": response.data
+        }, status=status.HTTP_201_CREATED)

@@ -1,61 +1,48 @@
 from rest_framework import serializers
+from .models import Enquiry
+from branch.models import Branch
+from login.models import Account
 from tellecaller.models import Telecaller
-from .models import Lead, CallRegister
-from datetime import datetime, time
+from tellecaller.serializers import TelecallerSerializer
 
-
-class TelecallerSerializer(serializers.ModelSerializer):
+class BranchSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Telecaller
-        fields = ['id', 'name', 'email']
+        model = Branch
+        fields = ['id', 'branch_name']
 
-
-class CallRegisterSerializer(serializers.ModelSerializer):
-    call_time = serializers.DateTimeField(format="%H:%M:%S", input_formats=["%H:%M:%S", "%Y-%m-%dT%H:%M:%S"])  # accept time and full datetime
-
-    class Meta:
-        model = CallRegister
-        fields = [
-            'id',
-            'lead',
-            'call_status',
-            'call_time',
-            'call_date',
-            'duration',
-            'respond_type',
-            'responds',
-            'remarks',
-            'created_at'
-        ]
-        read_only_fields = ['created_at']
-class LeadSerializer(serializers.ModelSerializer):
+class EnquirySerializer(serializers.ModelSerializer):
+    branch = BranchSerializer(read_only=True)
     telecaller = TelecallerSerializer(read_only=True)
+
     telecaller_id = serializers.PrimaryKeyRelatedField(
-        queryset=Telecaller.objects.all(),
-        source='telecaller',
-        write_only=True,
-        required=False
+        queryset=Telecaller.objects.all(), source='telecaller', write_only=True
     )
-    calls = CallRegisterSerializer(many=True, read_only=True)
+    branch_id = serializers.PrimaryKeyRelatedField(
+        queryset=Branch.objects.all(), source='branch', write_only=True
+    )
+    created_by_role = serializers.SerializerMethodField()
+
+    def get_created_by_role(self, obj):
+        return obj.created_by.role.name if obj.created_by and obj.created_by.role else None
 
     class Meta:
-        model = Lead
+        model = Enquiry
         fields = [
             'id',
-            'name',
-            'email',
+            'candidate_name',
             'phone',
-            'source',
-            'status',
-            'follow_up_date',
-            'follow_up_remarks',
-            'walk_in_date',
-            'walk_in_remark',
-            'notes',
-            'follow_up',
-            'created_at',
+            'phone2',
+            'email',
+            'enquiry_source',
+            'branch',
+            'branch_id',
             'telecaller',
             'telecaller_id',
-            'calls',
+            'preferred_course',
+            'required_service',
+            'feedback',
+            'follow_up_on',
+            'enquiry_status',
+            'created_at',
+            'created_by_role',
         ]
-        read_only_fields = ['created_at']

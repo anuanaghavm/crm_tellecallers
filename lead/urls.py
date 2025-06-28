@@ -1,14 +1,9 @@
 from django.urls import path
-from .views import (
-    LeadListCreateView,
-    LeadRetrieveUpdateDestroyView,
-    CallRegisterListCreateView,
-    CallRegisterRetrieveUpdateDestroyView
-)
+from .views import EnquiryListCreateView, EnquiryDetailView,WalkInEnquiryListView
 
 urlpatterns = [
-    path('leads/', LeadListCreateView.as_view(), name='lead-list-create'),
-    path('leads/<int:pk>/', LeadRetrieveUpdateDestroyView.as_view(), name='lead-detail'),
-    path('calls/', CallRegisterListCreateView.as_view(), name='call-list-create'),
-    path('calls/<int:pk>/', CallRegisterRetrieveUpdateDestroyView.as_view(), name='call-detail'),
+    path('enquiries/', EnquiryListCreateView.as_view(), name='enquiry-list-create'),
+    path('enquiries/<int:pk>/', EnquiryDetailView.as_view(), name='enquiry-detail'),
+    path('enquiries/walkin/', WalkInEnquiryListView.as_view(), name='walkin-enquiry-list'),
+
 ]
