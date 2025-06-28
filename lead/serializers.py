@@ -20,10 +20,19 @@ class EnquirySerializer(serializers.ModelSerializer):
     branch_id = serializers.PrimaryKeyRelatedField(
         queryset=Branch.objects.all(), source='branch', write_only=True
     )
+
     created_by_role = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    telecaller_name = serializers.SerializerMethodField()
 
     def get_created_by_role(self, obj):
         return obj.created_by.role.name if obj.created_by and obj.created_by.role else None
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.email if obj.created_by else None  # ✅ Only keep this one
+
+    def get_telecaller_name(self, obj):
+        return obj.telecaller.name if obj.telecaller else None
 
     class Meta:
         model = Enquiry
@@ -45,4 +54,6 @@ class EnquirySerializer(serializers.ModelSerializer):
             'enquiry_status',
             'created_at',
             'created_by_role',
+            'created_by_name',
+            'telecaller_name',
         ]

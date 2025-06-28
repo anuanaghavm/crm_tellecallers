@@ -30,19 +30,32 @@ class CustomPagination(PageNumberPagination):
 
 
 
-class WalkInEnquiryFilter(django_filters.FilterSet):
-    start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
-    end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
-    enquiry_source = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
-    telecaller_id = django_filters.NumberFilter(field_name='telecaller_id')
-    branch = django_filters.NumberFilter(field_name='branch_id')
+class WalkInListEnquiryFilter(django_filters.FilterSet):
+    start_date      = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
+    end_date        = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
+    enquiry_source  = django_filters.CharFilter(field_name='enquiry_source', lookup_expr='iexact')
+    enquiry_status  = django_filters.CharFilter(field_name='enquiry_status', lookup_expr='iexact')
+    telecaller_id   = django_filters.NumberFilter(field_name='telecaller_id')
+    branch_id       = django_filters.NumberFilter(field_name='branch_id')
+
+    # ——— New for filtering by branch name ———
+    branch_name     = django_filters.CharFilter(field_name='branch__branch_name', lookup_expr='icontains')
+
+    # ——— (Optional) If you want to filter by telecaller name too ———
+    telecaller_name = django_filters.CharFilter(field_name='telecaller__name', lookup_expr='icontains')
 
     class Meta:
         model = Enquiry
-        fields = ['enquiry_source', 'branch', 'telecaller_id', 'start_date', 'end_date']
-
-
-
+        fields = [
+            'enquiry_status',
+            'enquiry_source',
+            'branch_id',      # filtering by exact branch ID
+            'branch_name',    # filtering by partial branch name
+            'telecaller_id',
+            'telecaller_name',
+            'start_date',
+            'end_date',
+        ]
 
 # ✅ FilterSet for Active Enquiries
 class ActiveEnquiryFilter(django_filters.FilterSet):
@@ -94,14 +107,14 @@ class WalkInEnquiryListView(ListCreateAPIView):
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = CustomPagination
-
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
-    filterset_class = WalkInEnquiryFilter
+    filterset_class = WalkInListEnquiryFilter
     search_fields = ['candidate_name', 'email', 'phone', 'branch__branch_name']
 
     def get_queryset(self):
-        # Return only walk-in enquiries (you can customize the condition if needed)
-        return Enquiry.objects.filter(enquiry_source__iexact='Walk-In').order_by('-created_at')
+        # Always start with walk_in_list status
+        base_qs = Enquiry.objects.filter(enquiry_status='walk_in_list')
+        return base_qs.order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
