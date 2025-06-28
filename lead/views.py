@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import rest_framework as django_filters
+from tellecaller.models import Telecaller
+from rest_framework.views import APIView
 from .models import Enquiry
 from .serializers import EnquirySerializer
 
@@ -111,3 +113,34 @@ class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Enquiry.objects.all()
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+class EnquirySummaryByTelecaller(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request, *args, **kwargs):
+        telecallers = Telecaller.objects.all()
+        data = []
+
+        for telecaller in telecallers:
+            enquiries = Enquiry.objects.filter(telecaller=telecaller)
+
+            summary = {
+                "telecaller_id": telecaller.id,
+                "telecaller_name": telecaller.name,
+                "contacted": enquiries.filter(enquiry_status="contacted").count(),
+                "not_contacted": enquiries.exclude(enquiry_status="contacted").count(),
+                "calls": enquiries.count(),  # Assuming total = total calls
+                "answered": enquiries.filter(enquiry_status="Answered").count(),
+                "not_answered": enquiries.filter(enquiry_status="Not Answered").count(),
+                "positive": enquiries.filter(feedback__icontains="positive").count(),
+                "negative": enquiries.filter(feedback__icontains="negative").count(),
+                "walkin": enquiries.filter(enquiry_status="walk_in_list").count(),
+                "followup": enquiries.filter(enquiry_status="Follow Up").count(),
+            }
+            data.append(summary)
+
+        return Response({
+            "code": 200,
+            "message": "Enquiry summary fetched successfully",
+            "data": data
+        })

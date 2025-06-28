@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import EnquiryListCreateView, EnquiryDetailView,WalkInEnquiryListView,FollowUpEnquiryListView,ClosedEnquiryListView,ActiveEnquiryListView
+from .views import EnquiryListCreateView, EnquiryDetailView,WalkInEnquiryListView,FollowUpEnquiryListView,ClosedEnquiryListView,ActiveEnquiryListView,EnquirySummaryByTelecaller
 
 urlpatterns = [
     path('enquiries/', EnquiryListCreateView.as_view(), name='enquiry-list-create'),
@@ -8,5 +8,6 @@ urlpatterns = [
     path('enquiries/follow-up/', FollowUpEnquiryListView.as_view(), name='follow-up-enquiry-list'),
     path('enquiries/closed/', ClosedEnquiryListView.as_view(), name='closed-enquiry-list'),
     path('enquiries/active/', ActiveEnquiryListView.as_view(), name='active-enquiries'),
+    path('enquiries-summary/', EnquirySummaryByTelecaller.as_view(), name='enquiry-summary-by-telecaller')
 
 ]
