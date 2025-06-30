@@ -43,3 +43,23 @@ class TelecallerSerializer(serializers.ModelSerializer):
         )
         validated_data['account'] = account
         return Telecaller.objects.create(**validated_data)
+    
+    def update(self, instance, validated_data):
+        account = instance.account
+
+        email = validated_data.pop('email', None)
+        password = validated_data.pop('password', None)
+
+        if email:
+            account.email = email
+            instance.email = email  # <-- important
+        if password:
+            account.set_password(password)
+            account.raw_password = password
+        account.save()
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance

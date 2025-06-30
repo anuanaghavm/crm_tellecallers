@@ -22,7 +22,28 @@ class LoginSerializer(serializers.Serializer):
         except Account.DoesNotExist:
             raise serializers.ValidationError("Invalid credentials")
 
-        if user.raw_password != data['password']:
+        if not user.check_password(data['password']):
             raise serializers.ValidationError("Invalid credentials")
 
+        return user
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    new_password = serializers.CharField()
+
+    def validate(self, data):
+        try:
+            user = Account.objects.get(email=data['email'])
+        except Account.DoesNotExist:
+            raise serializers.ValidationError("Email not registered")
+
+        return data
+
+    def save(self):
+        email = self.validated_data['email']
+        new_password = self.validated_data['new_password']
+        user = Account.objects.get(email=email)
+        user.set_password(new_password)
+        user.raw_password = new_password
+        user.save()
         return user

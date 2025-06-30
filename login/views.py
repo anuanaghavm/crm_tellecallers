@@ -6,10 +6,10 @@ from login.models import Account
 from roles.models import Role
 from tellecaller.models import Telecaller
 from tellecaller.serializers import TelecallerSerializer
+from .serializers import RegisterSerializer,LoginSerializer,ForgotPasswordSerializer
 
 class RegisterView(APIView):
     def post(self, request):
-        from .serializers import RegisterSerializer
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -18,7 +18,6 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     def post(self, request):
-        from .serializers import LoginSerializer
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data
@@ -41,3 +40,12 @@ class LoginView(APIView):
             })
         return Response(serializer.errors, status=400)
 
+class ForgotPasswordView(APIView):
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                "message": "Password reset successfully"
+            }, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
