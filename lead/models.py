@@ -4,6 +4,7 @@ from django.db import models
 from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
+# from lead.models import Enquiry
 
 class Enquiry(models.Model):
     ENQUIRY_SOURCE_CHOICES = [
@@ -15,8 +16,6 @@ class Enquiry(models.Model):
     ENQUIRY_STATUS_CHOICES = [
         ('Active', 'Active'),
         ('Closed', 'Closed'),
-        ('Follow Up', 'Follow Up'),
-        ('Not Interested', 'Not Interested'),
     ]
 
     candidate_name = models.CharField(max_length=255)
@@ -35,3 +34,5 @@ class Enquiry(models.Model):
 
     def _str_(self):
         return self.candidate_name
+
+

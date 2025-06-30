@@ -4,6 +4,11 @@ from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
 from tellecaller.serializers import TelecallerSerializer
+from rest_framework import serializers
+# from .models import CallRegister
+from lead.models import Enquiry
+from tellecaller.models import Telecaller
+from django.utils import timezone
 
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
@@ -85,3 +90,8 @@ class EnquirySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+    
+
+
+
+

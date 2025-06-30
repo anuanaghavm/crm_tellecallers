@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'lead',
     'tellecaller',
     'drf_yasg',
+    'callregister',
     'corsheaders',
 ]
 

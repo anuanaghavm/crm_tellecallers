@@ -10,9 +10,19 @@ from django.db.models import Q
 from tellecaller.models import Telecaller
 from .models import Enquiry
 from .serializers import EnquirySerializer
+from rest_framework.permissions import IsAuthenticated
+# from rest_framework.filters import SearchFilter
+from datetime import datetime
 
 
-# ✅ Unified Pagination
+
+
+
+
+    
+ 
+
+# ✅ Pagination
 class LeadsPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'limit'
@@ -34,7 +44,7 @@ class LeadsPagination(PageNumberPagination):
         })
 
 
-# ✅ Enhanced FilterSet
+# ✅ Filter
 class EnquiryBaseFilter(django_filters.FilterSet):
     start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
@@ -50,7 +60,7 @@ class EnquiryBaseFilter(django_filters.FilterSet):
         fields = ['enquiry_source', 'branch', 'branch_name', 'telecaller', 'telecaller_name', 'enquiry_status', 'start_date', 'end_date']
 
 
-# ✅ Enhanced Base View for Status-based Views
+# ✅ Base View
 class BaseEnquiryListCreateView(ListCreateAPIView):
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -66,7 +76,6 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
         return Enquiry.objects.all().order_by('-created_at')
 
     def perform_create(self, serializer):
-        # Set the enquiry_status if specified and not already set
         if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
             serializer.save(
                 created_by=self.request.user,
@@ -79,7 +88,7 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
-        
+
         return Response({
             "code": 201,
             "message": f"{'Enquiry' if not self.enquiry_status else self.enquiry_status.replace('_', ' ').title()} created successfully",
@@ -88,8 +97,7 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
-        
-        # Check if pagination is disabled
+
         if request.query_params.get('no_pagination', '').lower() in ['true', '1']:
             serializer = self.get_serializer(queryset, many=True)
             return Response({
@@ -98,8 +106,7 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
                 "data": serializer.data,
                 "total": queryset.count()
             })
-        
-        # Apply pagination
+
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -114,43 +121,21 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
         })
 
 
-# ✅ Status-Specific Views
-class WalkInEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'walk_in_list'
-
-
-class FollowUpEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'Follow Up'
+# ✅ Active & Closed Enquiry Views
+class ActiveEnquiryListView(BaseEnquiryListCreateView):
+    enquiry_status = 'Active'
 
 
 class ClosedEnquiryListView(BaseEnquiryListCreateView):
     enquiry_status = 'Closed'
 
 
-class ActiveEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'Active'
-
-
-class ContactedEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'contacted'
-
-
-class AnsweredEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'Answered'
-
-
-class NotAnsweredEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'Not Answered'
-
-
-# ✅ General Enquiry View (All statuses, defaults to Active for creation)
+# ✅ General Enquiry View
 class EnquiryListCreateView(BaseEnquiryListCreateView):
     def get_queryset(self):
-        # Show all enquiries by default, but can be filtered
         return Enquiry.objects.all().order_by('-created_at')
 
     def perform_create(self, serializer):
-        # Default to 'Active' status if not specified
         if not serializer.validated_data.get('enquiry_status'):
             serializer.save(
                 created_by=self.request.user,
@@ -160,7 +145,7 @@ class EnquiryListCreateView(BaseEnquiryListCreateView):
             serializer.save(created_by=self.request.user)
 
 
-# ✅ Retrieve / Update / Delete View
+# ✅ Retrieve / Update / Delete
 class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
     queryset = Enquiry.objects.all()
     serializer_class = EnquirySerializer
@@ -197,46 +182,36 @@ class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
         }, status=status.HTTP_200_OK)
 
 
-# ✅ Enhanced Summary by Telecaller
+# ✅ Summary by Telecaller (Active & Closed only)
 class EnquirySummaryByTelecaller(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get(self, request):
-        # Apply date filters if provided
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         branch_id = request.query_params.get('branch')
-        
+
         data = []
         telecallers = Telecaller.objects.all()
-        
+
         if branch_id:
             telecallers = telecallers.filter(branch_id=branch_id)
 
         for telecaller in telecallers:
             enquiries = Enquiry.objects.filter(assigned_by=telecaller)
-            
-            # Apply date filters
+
             if start_date:
                 enquiries = enquiries.filter(created_at__gte=start_date)
             if end_date:
                 enquiries = enquiries.filter(created_at__lte=end_date)
-            
+
             summary = {
                 "telecaller_id": telecaller.id,
                 "telecaller_name": telecaller.name,
                 "branch_name": telecaller.branch.branch_name if hasattr(telecaller, 'branch') and telecaller.branch else None,
                 "total_enquiries": enquiries.count(),
                 "active": enquiries.filter(enquiry_status="Active").count(),
-                "contacted": enquiries.filter(enquiry_status="contacted").count(),
-                "not_contacted": enquiries.exclude(enquiry_status="contacted").count(),
-                "answered": enquiries.filter(enquiry_status="Answered").count(),
-                "not_answered": enquiries.filter(enquiry_status="Not Answered").count(),
-                "walkin": enquiries.filter(enquiry_status="walk_in_list").count(),
-                "followup": enquiries.filter(enquiry_status="Follow Up").count(),
                 "closed": enquiries.filter(enquiry_status="Closed").count(),
-                "positive": enquiries.filter(feedback__icontains="positive").count(),
-                "negative": enquiries.filter(feedback__icontains="negative").count(),
             }
             data.append(summary)
 
@@ -248,52 +223,17 @@ class EnquirySummaryByTelecaller(APIView):
         })
 
 
-# ✅ Simplified Non-Paginated View (now handled by base view with query param)
-class EnquiryListWithoutPagination(APIView):
-    permission_classes = [IsAuthenticatedOrReadOnly]
-
-    def get(self, request):
-        # This view is now redundant as the base view handles no_pagination=true
-        # But keeping for backward compatibility
-        queryset = Enquiry.objects.all().order_by('-created_at')
-
-        # Apply filters
-        filterset = EnquiryBaseFilter(request.GET, queryset=queryset)
-        if filterset.is_valid():
-            queryset = filterset.qs
-
-        # Apply search
-        search_query = request.GET.get('search')
-        if search_query:
-            queryset = queryset.filter(
-                Q(candidate_name__icontains=search_query) |
-                Q(email__icontains=search_query) |
-                Q(phone__icontains=search_query) |
-                Q(assigned_by__name__icontains=search_query) |
-                Q(assigned_by__branch__branch_name__icontains=search_query)
-            )
-
-        serializer = EnquirySerializer(queryset, many=True)
-        return Response({
-            "code": 200,
-            "message": "All enquiries fetched successfully (no pagination)",
-            "data": serializer.data,
-            "total": queryset.count()
-        })
-
-
-# ✅ Enquiry Statistics View
+# ✅ Enquiry Statistics (Active & Closed only)
 class EnquiryStatisticsView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get(self, request):
-        # Apply date filters if provided
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         branch_id = request.query_params.get('branch')
-        
+
         queryset = Enquiry.objects.all()
-        
+
         if start_date:
             queryset = queryset.filter(created_at__gte=start_date)
         if end_date:
@@ -304,14 +244,7 @@ class EnquiryStatisticsView(APIView):
         stats = {
             "total_enquiries": queryset.count(),
             "active": queryset.filter(enquiry_status="Active").count(),
-            "contacted": queryset.filter(enquiry_status="contacted").count(),
-            "answered": queryset.filter(enquiry_status="Answered").count(),
-            "not_answered": queryset.filter(enquiry_status="Not Answered").count(),
-            "walkin": queryset.filter(enquiry_status="walk_in_list").count(),
-            "followup": queryset.filter(enquiry_status="Follow Up").count(),
             "closed": queryset.filter(enquiry_status="Closed").count(),
-            "positive_feedback": queryset.filter(feedback__icontains="positive").count(),
-            "negative_feedback": queryset.filter(feedback__icontains="negative").count(),
         }
 
         return Response({
@@ -319,3 +252,5 @@ class EnquiryStatisticsView(APIView):
             "message": "Enquiry statistics fetched successfully",
             "data": stats
         })
+
+
