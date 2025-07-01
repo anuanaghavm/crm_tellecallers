@@ -271,73 +271,73 @@ class TelecallerDashboardView(generics.GenericAPIView):
 
     def get(self, request):
         user = request.user
+
+        if user.role and user.role.name == 'Admin':
+            total_calls = CallRegister.objects.count()
+            total_leads = Enquiry.objects.count()
+            total_telecallers = Telecaller.objects.count()
+
+            return Response({
+                'dashboard_type': 'admin',
+                'total_calls': total_calls,
+                'total_leads': total_leads,
+                'total_telecallers': total_telecallers,
+            })
+
+        # If telecaller
         try:
             telecaller = Telecaller.objects.get(account=user)
         except Telecaller.DoesNotExist:
             return Response(
-                {'error': 'Only telecallers can access dashboard.'}, 
+                {'error': 'Only telecallers can access dashboard.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
         today = timezone.now().date()
 
-        # Pending follow-ups from CallRegister
-        pending_followups_calls = CallRegister.objects.filter(
+        total_calls = CallRegister.objects.filter(telecaller=telecaller).count()
+        total_leads = Enquiry.objects.filter(assigned_by=telecaller).count()
+        pending_followups = CallRegister.objects.filter(
             telecaller=telecaller,
             call_outcome='Follow Up',
             follow_up_date__lte=today
-        ).select_related('enquiry').values(
-            'id', 'enquiry__candidate_name', 'enquiry__phone', 
-            'follow_up_date', 'enquiry__preferred_course', 'notes'
-        )
-
-        # Walk-in list
-        walk_in_list = CallRegister.objects.filter(
+        ).count()
+        walkin_count = CallRegister.objects.filter(
             telecaller=telecaller,
             call_outcome='walk_in_list'
-        ).select_related('enquiry').values(
-            'id', 'enquiry__candidate_name', 'enquiry__phone',
-            'enquiry__preferred_course', 'call_start_time'
-        )
-
-        recent_calls = CallRegister.objects.filter(
-            telecaller=telecaller
-        ).select_related('enquiry').order_by('-created_at')[:10]
-
-        recent_calls_data = []
-        for call in recent_calls:
-            recent_calls_data.append({
-                'id': call.id,
-                'candidate_name': call.enquiry.candidate_name,
-                'call_status': call.call_status,
-                'call_outcome': call.call_outcome,
-                'call_start_time': call.call_start_time,
-                'notes': call.notes,
-            })
-
-        new_enquiries = Enquiry.objects.filter(
-            assigned_by=telecaller,
-            created_at__date=today
-        ).values('id', 'candidate_name', 'phone', 'preferred_course', 'enquiry_source')
+        ).count()
 
         return Response({
-            'pending_followups': list(pending_followups_calls),
-            'walk_in_list': list(walk_in_list),
-            'recent_calls': recent_calls_data,
-            'new_enquiries': list(new_enquiries),
+            'dashboard_type': 'telecaller',
+            'total_calls': total_calls,
+            'total_leads': total_leads,
+            'pending_followups': pending_followups,
+            'walkin_list': walkin_count,
         })
+
     
 class TelecallerCallSummaryView(APIView):
     permission_classes = [IsAuthenticated]
-    pagination_class = callsPagination
-
+    pagination_class = callsPagination  # This won't apply in APIView directly unless paginated manually
 
     def get(self, request):
-        # Only Admins can access all telecaller stats
+        # Only Admins can access this view
         if not request.user.role or request.user.role.name != 'Admin':
             return Response({'error': 'Only admin can access this data.'}, status=403)
 
+        # Get optional filters
+        branch_name = request.query_params.get('branch_name')
+        telecaller_name = request.query_params.get('telecaller_name')
+
+        # Filter telecallers accordingly
         telecallers = Telecaller.objects.all()
+
+        if branch_name:
+            telecallers = telecallers.filter(branch__branch_name__icontains=branch_name)
+
+        if telecaller_name:
+            telecallers = telecallers.filter(name__icontains=telecaller_name)
+
         response_data = []
 
         for telecaller in telecallers:
@@ -346,6 +346,7 @@ class TelecallerCallSummaryView(APIView):
             summary = {
                 'telecaller_id': telecaller.id,
                 'telecaller_name': telecaller.name,
+                'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
                 'total_calls': calls.count(),
                 'total_follow_ups': calls.filter(call_outcome='Follow Up').count(),
                 'contacted': calls.filter(call_status='contacted').count(),
