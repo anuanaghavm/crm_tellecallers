@@ -8,19 +8,10 @@ from django_filters import rest_framework as django_filters
 from rest_framework.views import APIView
 from django.db.models import Q
 from tellecaller.models import Telecaller
-from .models import Enquiry
-from .serializers import EnquirySerializer
+from .models import Enquiry, Mettad
+from .serializers import EnquirySerializer, MettadSerializer
 from rest_framework.permissions import IsAuthenticated
-# from rest_framework.filters import SearchFilter
 from datetime import datetime
-
-
-
-
-
-
-    
- 
 
 # ✅ Pagination
 class LeadsPagination(PageNumberPagination):
@@ -43,8 +34,7 @@ class LeadsPagination(PageNumberPagination):
             }
         })
 
-
-# ✅ Filter
+# ✅ Updated Filter with Mettad
 class EnquiryBaseFilter(django_filters.FilterSet):
     start_date = django_filters.DateFilter(field_name='created_at', lookup_expr='gte')
     end_date = django_filters.DateFilter(field_name='created_at', lookup_expr='lte')
@@ -54,26 +44,31 @@ class EnquiryBaseFilter(django_filters.FilterSet):
     telecaller = django_filters.NumberFilter(field_name='assigned_by')
     telecaller_name = django_filters.CharFilter(field_name='assigned_by__name', lookup_expr='icontains')
     enquiry_status = django_filters.CharFilter(field_name='enquiry_status', lookup_expr='iexact')
+    
+    # Mettad filters
+    mettad = django_filters.NumberFilter(field_name='Mettad')
+    mettad_name = django_filters.CharFilter(field_name='Mettad__name', lookup_expr='icontains')
 
     class Meta:
         model = Enquiry
-        fields = ['enquiry_source', 'branch', 'branch_name', 'telecaller', 'telecaller_name', 'enquiry_status', 'start_date', 'end_date']
+        fields = ['enquiry_source', 'branch', 'branch_name', 'telecaller', 'telecaller_name', 
+                 'enquiry_status', 'start_date', 'end_date', 'mettad', 'mettad_name']
 
-
-# ✅ Base View
+# ✅ Base View (Updated search fields)
 class BaseEnquiryListCreateView(ListCreateAPIView):
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = LeadsPagination
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
     filterset_class = EnquiryBaseFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'assigned_by__branch__branch_name', 'assigned_by__name']
+    search_fields = ['candidate_name', 'email', 'phone', 'assigned_by__branch__branch_name', 
+                    'assigned_by__name', 'Mettad__name']
     enquiry_status = None
 
     def get_queryset(self):
         if self.enquiry_status:
-            return Enquiry.objects.filter(enquiry_status=self.enquiry_status).order_by('-created_at')
-        return Enquiry.objects.all().order_by('-created_at')
+            return Enquiry.objects.filter(enquiry_status=self.enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
     def perform_create(self, serializer):
         if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
@@ -120,20 +115,82 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
             "total": queryset.count()
         })
 
+# ✅ Mettad List/Create View
+class MettadListCreateView(ListCreateAPIView):
+    queryset = Mettad.objects.all().order_by('name')
+    serializer_class = MettadSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
 
-# ✅ Active & Closed Enquiry Views
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response({
+            "code": 201,
+            "message": "Mettad created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Mettads fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
+# ✅ Mettad Detail View
+class MettadDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Mettad.objects.all()
+    serializer_class = MettadSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "code": 200,
+            "message": "Mettad details fetched successfully",
+            "data": serializer.data
+        })
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({
+            "code": 200,
+            "message": "Mettad updated successfully",
+            "data": serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "code": 200,
+            "message": "Mettad deleted successfully"
+        }, status=status.HTTP_200_OK)
+
+# ✅ Active & Closed Enquiry Views (same as before)
 class ActiveEnquiryListView(BaseEnquiryListCreateView):
     enquiry_status = 'Active'
-
 
 class ClosedEnquiryListView(BaseEnquiryListCreateView):
     enquiry_status = 'Closed'
 
-
-# ✅ General Enquiry View
+# ✅ General Enquiry View (same as before)
 class EnquiryListCreateView(BaseEnquiryListCreateView):
     def get_queryset(self):
-        return Enquiry.objects.all().order_by('-created_at')
+        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
     def perform_create(self, serializer):
         if not serializer.validated_data.get('enquiry_status'):
@@ -144,10 +201,9 @@ class EnquiryListCreateView(BaseEnquiryListCreateView):
         else:
             serializer.save(created_by=self.request.user)
 
-
-# ✅ Retrieve / Update / Delete
+# ✅ Retrieve / Update / Delete (same as before)
 class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
-    queryset = Enquiry.objects.all()
+    queryset = Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch')
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -181,8 +237,7 @@ class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
             "message": "Enquiry deleted successfully"
         }, status=status.HTTP_200_OK)
 
-
-# ✅ Summary by Telecaller (Active & Closed only)
+# ✅ Summary by Telecaller (Updated to include Mettad info)
 class EnquirySummaryByTelecaller(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -190,6 +245,7 @@ class EnquirySummaryByTelecaller(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         branch_id = request.query_params.get('branch')
+        mettad_id = request.query_params.get('mettad')
 
         data = []
         telecallers = Telecaller.objects.all()
@@ -204,6 +260,8 @@ class EnquirySummaryByTelecaller(APIView):
                 enquiries = enquiries.filter(created_at__gte=start_date)
             if end_date:
                 enquiries = enquiries.filter(created_at__lte=end_date)
+            if mettad_id:
+                enquiries = enquiries.filter(Mettad_id=mettad_id)
 
             summary = {
                 "telecaller_id": telecaller.id,
@@ -222,8 +280,7 @@ class EnquirySummaryByTelecaller(APIView):
             "total_telecallers": len(data)
         })
 
-
-# ✅ Enquiry Statistics (Active & Closed only)
+# ✅ Enquiry Statistics (Updated to include Mettad filter)
 class EnquiryStatisticsView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -231,6 +288,7 @@ class EnquiryStatisticsView(APIView):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         branch_id = request.query_params.get('branch')
+        mettad_id = request.query_params.get('mettad')
 
         queryset = Enquiry.objects.all()
 
@@ -240,6 +298,8 @@ class EnquiryStatisticsView(APIView):
             queryset = queryset.filter(created_at__lte=end_date)
         if branch_id:
             queryset = queryset.filter(assigned_by__branch_id=branch_id)
+        if mettad_id:
+            queryset = queryset.filter(Mettad_id=mettad_id)
 
         stats = {
             "total_enquiries": queryset.count(),
@@ -252,5 +312,3 @@ class EnquiryStatisticsView(APIView):
             "message": "Enquiry statistics fetched successfully",
             "data": stats
         })
-
-

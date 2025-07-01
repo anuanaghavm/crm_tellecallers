@@ -1,13 +1,9 @@
 from rest_framework import serializers
-from .models import Enquiry
+from .models import Enquiry, Mettad
 from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
 from tellecaller.serializers import TelecallerSerializer
-from rest_framework import serializers
-# from .models import CallRegister
-from lead.models import Enquiry
-from tellecaller.models import Telecaller
 from django.utils import timezone
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -15,17 +11,27 @@ class BranchSerializer(serializers.ModelSerializer):
         model = Branch
         fields = ['id', 'branch_name']
 
-# enquiry/serializers.py
+class MettadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mettad
+        fields = ['id', 'name']
 
+# Updated EnquirySerializer with Mettad integration
 class EnquirySerializer(serializers.ModelSerializer):
     assigned_by_id = serializers.PrimaryKeyRelatedField(
         queryset=Telecaller.objects.all(), source='assigned_by', write_only=True, required=False
     )
     assigned_by_name = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
-
+    
     created_by_role = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    
+    # Mettad fields
+    mettad_id = serializers.PrimaryKeyRelatedField(
+        queryset=Mettad.objects.all(), source='Mettad', write_only=True, required=False
+    )
+    mettad_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Enquiry
@@ -35,20 +41,23 @@ class EnquirySerializer(serializers.ModelSerializer):
             'phone',
             'phone2',
             'email',
-            'enquiry_source',
             'preferred_course',
             'required_service',
             'feedback',
             'follow_up_on',
             'enquiry_status',
             'created_at',
-
+            
             # Role-based logic
             'created_by_role',
             'created_by_name',
             'assigned_by_id',
             'assigned_by_name',
             'branch_name',
+            
+            # Mettad fields
+            'mettad_id',
+            'mettad_name',
         ]
 
     def get_created_by_role(self, obj):
@@ -67,6 +76,9 @@ class EnquirySerializer(serializers.ModelSerializer):
 
     def get_branch_name(self, obj):
         return obj.assigned_by.branch.branch_name if obj.assigned_by and obj.assigned_by.branch else None
+
+    def get_mettad_name(self, obj):
+        return obj.Mettad.name if obj.Mettad else None
 
     def validate(self, data):
         request_user = self.context['request'].user
@@ -90,8 +102,3 @@ class EnquirySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
-    
-
-
-
-
