@@ -11,7 +11,7 @@ from lead.models import Enquiry
 from tellecaller.models import Telecaller
 from datetime import timedelta
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 
 
 # ✅ Custom Pagination Class
@@ -316,21 +316,19 @@ class TelecallerDashboardView(generics.GenericAPIView):
         })
 
     
-class TelecallerCallSummaryView(APIView):
+class TelecallerCallSummaryView(ListAPIView):
     permission_classes = [IsAuthenticated]
-    pagination_class = callsPagination  # This won't apply in APIView directly unless paginated manually
+    pagination_class = callsPagination
 
-    def get(self, request):
-        # Only Admins can access this view
-        if not request.user.role or request.user.role.name != 'Admin':
-            return Response({'error': 'Only admin can access this data.'}, status=403)
+    def get_queryset(self):
+        if not self.request.user.role or self.request.user.role.name != 'Admin':
+            return Telecaller.objects.none()  # empty queryset if not admin
 
-        # Get optional filters
-        branch_name = request.query_params.get('branch_name')
-        telecaller_name = request.query_params.get('telecaller_name')
+        branch_name = self.request.query_params.get('branch_name', '').strip()
+        telecaller_name = self.request.query_params.get('telecaller_name', '').strip()
+        search_telecaller = self.request.query_params.get('search_telecaller_name', '').strip()
 
-        # Filter telecallers accordingly
-        telecallers = Telecaller.objects.all()
+        telecallers = Telecaller.objects.select_related('branch').all()
 
         if branch_name:
             telecallers = telecallers.filter(branch__branch_name__icontains=branch_name)
@@ -338,9 +336,19 @@ class TelecallerCallSummaryView(APIView):
         if telecaller_name:
             telecallers = telecallers.filter(name__icontains=telecaller_name)
 
-        response_data = []
+        if search_telecaller:
+            telecallers = telecallers.filter(name__istartswith=search_telecaller)
 
-        for telecaller in telecallers:
+        return telecallers
+
+    def list(self, request, *args, **kwargs):
+        if not request.user.role or request.user.role.name != 'Admin':
+            return Response({'error': 'Only admin can access this data.'}, status=403)
+
+        queryset = self.paginate_queryset(self.get_queryset())
+
+        response_data = []
+        for telecaller in queryset:
             calls = CallRegister.objects.filter(telecaller=telecaller)
 
             summary = {
@@ -360,8 +368,4 @@ class TelecallerCallSummaryView(APIView):
 
             response_data.append(summary)
 
-        return Response({
-            "code": 200,
-            "message": "Telecaller call summary fetched successfully",
-            "data": response_data
-        })
+        return self.get_paginated_response(response_data)
