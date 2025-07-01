@@ -11,6 +11,8 @@ from lead.models import Enquiry
 from tellecaller.models import Telecaller
 from datetime import timedelta
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.views import APIView
+
 
 # ✅ Custom Pagination Class
 class callsPagination(PageNumberPagination):
@@ -323,4 +325,42 @@ class TelecallerDashboardView(generics.GenericAPIView):
             'walk_in_list': list(walk_in_list),
             'recent_calls': recent_calls_data,
             'new_enquiries': list(new_enquiries),
+        })
+    
+class TelecallerCallSummaryView(APIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = callsPagination
+
+
+    def get(self, request):
+        # Only Admins can access all telecaller stats
+        if not request.user.role or request.user.role.name != 'Admin':
+            return Response({'error': 'Only admin can access this data.'}, status=403)
+
+        telecallers = Telecaller.objects.all()
+        response_data = []
+
+        for telecaller in telecallers:
+            calls = CallRegister.objects.filter(telecaller=telecaller)
+
+            summary = {
+                'telecaller_id': telecaller.id,
+                'telecaller_name': telecaller.name,
+                'total_calls': calls.count(),
+                'total_follow_ups': calls.filter(call_outcome='Follow Up').count(),
+                'contacted': calls.filter(call_status='contacted').count(),
+                'not_contacted': calls.filter(call_status='not_contacted').count(),
+                'answered': calls.filter(call_status='answered').count(),
+                'not_answered': calls.filter(call_status='Not Answered').count(),
+                'walk_in_list': calls.filter(call_outcome='walk_in_list').count(),
+                'positive': calls.filter(call_outcome__in=['Interested', 'Converted']).count(),
+                'negative': calls.filter(call_outcome__in=['Not Interested', 'Do Not Call']).count(),
+            }
+
+            response_data.append(summary)
+
+        return Response({
+            "code": 200,
+            "message": "Telecaller call summary fetched successfully",
+            "data": response_data
         })
