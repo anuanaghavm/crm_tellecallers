@@ -11,7 +11,8 @@ from lead.models import Enquiry
 from tellecaller.models import Telecaller
 from datetime import timedelta
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.generics import ListAPIView
+from rest_framework.generics import ListAPIView ,GenericAPIView
+from rest_framework.views import APIView
 
 
 # ✅ Custom Pagination Class
@@ -369,3 +370,40 @@ class TelecallerCallSummaryView(ListAPIView):
             response_data.append(summary)
 
         return self.get_paginated_response(response_data)
+    
+class TelecallerJobsView(GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = callsPagination
+
+    def get(self, request):
+        user = request.user
+        if not user.role or user.role.name != 'Admin':
+            return Response({'error': 'Only admins can access this data.'}, status=403)
+
+        telecallers = Telecaller.objects.select_related('branch').order_by('id')
+        paginated_telecallers = self.paginate_queryset(telecallers)
+
+        data = []
+
+        for telecaller in paginated_telecallers:
+            enquiries = Enquiry.objects.filter(assigned_by=telecaller)
+            total_jobs = enquiries.count()
+            completed_jobs = 0
+
+            for enquiry in enquiries:
+                call_log_exists = CallRegister.objects.filter(enquiry=enquiry).exists()
+                if call_log_exists:
+                    completed_jobs += 1  # ✅ increment only if call exists
+
+            progress_percent = round((completed_jobs / total_jobs) * 100, 2) if total_jobs else 0
+
+            data.append({
+                'telecaller_id': telecaller.id,
+                'telecaller_name': telecaller.name,
+                'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
+                'total_jobs': total_jobs,
+                'completed_jobs': completed_jobs,
+                'progress': f"{completed_jobs}/{total_jobs} ({progress_percent}%)",
+            })
+
+        return self.get_paginated_response(data)
