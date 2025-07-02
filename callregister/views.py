@@ -12,7 +12,7 @@ from tellecaller.models import Telecaller
 from datetime import timedelta
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.generics import ListAPIView ,GenericAPIView
-from rest_framework.views import APIView
+from rest_framework import serializers
 
 
 # ✅ Custom Pagination Class
@@ -374,8 +374,12 @@ class TelecallerCallSummaryView(ListAPIView):
 class TelecallerJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
+    serializer_class = serializers.Serializer  # Dummy serializer to satisfy Swagger
 
     def get(self, request):
+        if getattr(self, 'swagger_fake_view', False):  # <-- This fixes Swagger error
+            return Response()
+
         user = request.user
         if not user.role or user.role.name != 'Admin':
             return Response({'error': 'Only admins can access this data.'}, status=403)
@@ -393,7 +397,7 @@ class TelecallerJobsView(GenericAPIView):
             for enquiry in enquiries:
                 call_log_exists = CallRegister.objects.filter(enquiry=enquiry).exists()
                 if call_log_exists:
-                    completed_jobs += 1  # ✅ increment only if call exists
+                    completed_jobs += 1
 
             progress_percent = round((completed_jobs / total_jobs) * 100, 2) if total_jobs else 0
 
