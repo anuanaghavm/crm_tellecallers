@@ -88,31 +88,50 @@ class FollowUpCallsView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role and user.role.name == 'Admin':
-            queryset = CallRegister.objects.select_related(
-                'enquiry', 'telecaller', 'telecaller__branch'
-            ).filter(call_outcome='Follow Up')
-        else:
+        base_queryset = CallRegister.objects.select_related(
+            'enquiry', 'telecaller', 'telecaller__branch'
+        ).filter(call_outcome='Follow Up')
+
+        if user.role and user.role.name != 'Admin':
             try:
                 telecaller = Telecaller.objects.get(account=user)
-                queryset = CallRegister.objects.select_related(
-                    'enquiry', 'telecaller', 'telecaller__branch'
-                ).filter(telecaller=telecaller, call_outcome='Follow Up')
+                base_queryset = base_queryset.filter(telecaller=telecaller)
             except Telecaller.DoesNotExist:
                 return CallRegister.objects.none()
-        
-        # Additional filtering options
-        follow_up_date = self.request.query_params.get('follow_up_date', None)
+
+        # ✅ Optional Filters
+        branch_name = self.request.query_params.get('branch_name')
+        telecaller_name = self.request.query_params.get('telecaller_name')
+        enquiry_date = self.request.query_params.get('enquiry_date')
+        enquiry_status = self.request.query_params.get('enquiry_status')
+        follow_up_date = self.request.query_params.get('follow_up_date')
+        pending_only = self.request.query_params.get('pending_only')
+
+        if branch_name:
+            base_queryset = base_queryset.filter(
+                telecaller__branch__branch_name__icontains=branch_name
+            )
+        if telecaller_name:
+            base_queryset = base_queryset.filter(
+                telecaller__name__icontains=telecaller_name
+            )
+        if enquiry_date:
+            base_queryset = base_queryset.filter(
+                enquiry__created_at__date=enquiry_date
+            )
+        if enquiry_status:
+            base_queryset = base_queryset.filter(
+                enquiry__enquiry_status__iexact=enquiry_status
+            )
         if follow_up_date:
-            queryset = queryset.filter(follow_up_date=follow_up_date)
-            
-        # Filter for pending follow-ups (due today or overdue)
-        pending_only = self.request.query_params.get('pending_only', None)
+            base_queryset = base_queryset.filter(
+                follow_up_date=follow_up_date
+            )
         if pending_only and pending_only.lower() == 'true':
             today = timezone.now().date()
-            queryset = queryset.filter(follow_up_date__lte=today)
-            
-        return queryset
+            base_queryset = base_queryset.filter(follow_up_date__lte=today)
+
+        return base_queryset
 
 # ✅ Walk-in List View with Pagination
 class WalkInListView(generics.ListAPIView):
@@ -126,21 +145,41 @@ class WalkInListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role and user.role.name == 'Admin':
-            queryset = CallRegister.objects.select_related(
-                'enquiry', 'telecaller', 'telecaller__branch'
-            ).filter(call_outcome='walk_in_list')
-        else:
+        base_queryset = CallRegister.objects.select_related(
+            'enquiry', 'telecaller', 'telecaller__branch'
+        ).filter(call_outcome='walk_in_list')
+
+        if user.role and user.role.name != 'Admin':
             try:
                 telecaller = Telecaller.objects.get(account=user)
-                queryset = CallRegister.objects.select_related(
-                    'enquiry', 'telecaller', 'telecaller__branch'
-                ).filter(telecaller=telecaller, call_outcome='walk_in_list')
+                base_queryset = base_queryset.filter(telecaller=telecaller)
             except Telecaller.DoesNotExist:
                 return CallRegister.objects.none()
-                
-        return queryset
 
+        # ✅ Optional Filters
+        branch_name = self.request.query_params.get('branch_name')
+        telecaller_name = self.request.query_params.get('telecaller_name')
+        enquiry_date = self.request.query_params.get('enquiry_date')
+        enquiry_status = self.request.query_params.get('enquiry_status')
+
+        if branch_name:
+            base_queryset = base_queryset.filter(
+                telecaller__branch__branch_name__icontains=branch_name
+            )
+        if telecaller_name:
+            base_queryset = base_queryset.filter(
+                telecaller__name__icontains=telecaller_name
+            )
+        if enquiry_date:
+            base_queryset = base_queryset.filter(
+                enquiry__created_at__date=enquiry_date
+            )
+        if enquiry_status:
+            base_queryset = base_queryset.filter(
+                enquiry__enquiry_status__iexact=enquiry_status
+            )
+
+        return base_queryset
 # ✅ Call Outcome Filter View (Generic for all outcomes)
 class CallOutcomeFilterView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer

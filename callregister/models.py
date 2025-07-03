@@ -7,6 +7,7 @@ class CallRegister(models.Model):
         ('Incoming', 'Incoming'),
         ('Outgoing', 'Outgoing'),
     ]
+
     
     CALL_STATUS_CHOICES = [
         ('contacted', 'contacted'),
