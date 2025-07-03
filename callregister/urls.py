@@ -6,7 +6,7 @@ from .views import (
     TelecallerDashboardView,
     FollowUpCallsView,
     WalkInListView,
-    CallOutcomeFilterView,TelecallerCallSummaryView,TelecallerJobsView
+    CallOutcomeFilterView,TelecallerCallSummaryView,TelecallerJobsView,NotAnsweredCallsView
 )
 
 urlpatterns = [
@@ -17,7 +17,8 @@ urlpatterns = [
     # Statistics and Dashboard
     path('calls/stats/', TelecallerCallStatsView.as_view(), name='telecaller-call-stats'),
     path('dashboard/', TelecallerDashboardView.as_view(), name='telecaller-dashboard'),
-    
+    path('calls/not-answered/',NotAnsweredCallsView.as_view(), name='not-answered-calls'),
+
     # Outcome-based filtering
     path('calls/follow-ups/', FollowUpCallsView.as_view(), name='follow-up-calls'),
     path('calls/walk-in-list/', WalkInListView.as_view(), name='walk-in-list'),

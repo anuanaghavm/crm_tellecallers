@@ -450,3 +450,55 @@ class TelecallerJobsView(GenericAPIView):
             })
 
         return self.get_paginated_response(data)
+
+
+
+
+
+
+class NotAnsweredCallsView(generics.ListAPIView):
+    serializer_class = CallRegisterSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = callsPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['enquiry__candidate_name', 'enquiry__phone', 'notes']
+    ordering_fields = ['call_start_time', 'created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        user = self.request.user
+        base_queryset = CallRegister.objects.select_related(
+            'enquiry', 'telecaller', 'telecaller__branch'
+        ).filter(call_status='Not Answered')
+
+        if user.role and user.role.name != 'Admin':
+            try:
+                telecaller = Telecaller.objects.get(account=user)
+                base_queryset = base_queryset.filter(telecaller=telecaller)
+            except Telecaller.DoesNotExist:
+                return CallRegister.objects.none()
+
+        # ✅ Optional Filters
+        branch_name = self.request.query_params.get('branch_name')
+        telecaller_name = self.request.query_params.get('telecaller_name')
+        enquiry_date = self.request.query_params.get('enquiry_date')
+        enquiry_status = self.request.query_params.get('enquiry_status')
+
+        if branch_name:
+            base_queryset = base_queryset.filter(
+                telecaller__branch__branch_name__icontains=branch_name
+            )
+        if telecaller_name:
+            base_queryset = base_queryset.filter(
+                telecaller__name__icontains=telecaller_name
+            )
+        if enquiry_date:
+            base_queryset = base_queryset.filter(
+                enquiry__created_at__date=enquiry_date
+            )
+        if enquiry_status:
+            base_queryset = base_queryset.filter(
+                enquiry__enquiry_status__iexact=enquiry_status
+            )
+
+        return base_queryset
