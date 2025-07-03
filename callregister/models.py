@@ -38,7 +38,7 @@ class CallRegister(models.Model):
     call_outcome = models.CharField(max_length=30, choices=CALL_OUTCOME_CHOICES, blank=True, null=True)
     
     call_duration = models.PositiveIntegerField(help_text="Duration in seconds", blank=True, null=True)
-    call_start_time = models.DateTimeField()
+    call_start_time = models.DateTimeField(blank=True, null=True)
     call_end_time = models.DateTimeField(blank=True, null=True)
     
     notes = models.TextField(blank=True, null=True, help_text="Call notes and remarks")
@@ -62,3 +62,6 @@ class CallRegister(models.Model):
             duration = (self.call_end_time - self.call_start_time).total_seconds()
             self.call_duration = int(duration)
         super().save(*args, **kwargs)
+
+
+

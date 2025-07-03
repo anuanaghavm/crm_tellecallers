@@ -59,11 +59,18 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     serializer_class = EnquirySerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = LeadsPagination
-    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
     filterset_class = EnquiryBaseFilter
-    search_fields = ['candidate_name', 'email', 'phone', 'assigned_by__branch__branch_name', 
-                    'assigned_by__name', 'Mettad__name']
-    enquiry_status = None
+
+    filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+    search_fields = [
+        'candidate_name',
+        'email',
+        'phone',
+        'assigned_by__branch__branch_name',
+        'assigned_by__name',
+        'Mettad__name'
+    ]
+
 
     def get_queryset(self):
         if self.enquiry_status:
