@@ -413,7 +413,7 @@ class TelecallerCallSummaryView(ListAPIView):
 class AdminJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
-    serializer_class = serializers.Serializer  # Dummy for Swagger
+    serializer_class = serializers.Serializer  # Dummy serializer
 
     def get(self, request):
         if getattr(self, 'swagger_fake_view', False):
@@ -423,51 +423,51 @@ class AdminJobsView(GenericAPIView):
         if not user.role or user.role.name != 'Admin':
             return Response({'error': 'Only admins can access this data.'}, status=403)
 
-        filter_status = request.query_params.get("status")  # "remaining" or "completed"
+        filter_status = request.query_params.get("status")  # remaining/completed/None
 
-        telecallers = Telecaller.objects.select_related('branch').order_by('id')
-        all_data = defaultdict(list)
+        all_enquiries = Enquiry.objects.select_related('assigned_by__branch').order_by('-created_at')
+        grouped_by_date = defaultdict(list)
 
-        for telecaller in telecallers:
-            enquiries = Enquiry.objects.filter(assigned_by=telecaller)
+        for enquiry in all_enquiries:
+            assigned_date = enquiry.created_at.date()
+            telecaller = enquiry.assigned_by
 
-            # Group by date
-            date_map = defaultdict(list)
-            for enquiry in enquiries:
-                assigned_date = enquiry.created_at.date()
-                date_map[assigned_date].append(enquiry)
+            call = CallRegister.objects.filter(enquiry=enquiry).first()
+            has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
-            for assigned_date, enquiries_on_date in date_map.items():
-                total_jobs = len(enquiries_on_date)
-                completed_jobs = sum(CallRegister.objects.filter(enquiry=e).exists() for e in enquiries_on_date)
+            # Filter by status
+            if filter_status == "completed" and not has_outcome:
+                continue
+            if filter_status == "remining" and has_outcome:
+                continue
 
-                if filter_status == "remaining" and total_jobs == completed_jobs:
-                    continue
-                if filter_status == "completed" and (total_jobs == 0 or total_jobs != completed_jobs):
-                    continue
-
-                progress_percent = round((completed_jobs / total_jobs) * 100, 2) if total_jobs else 0
-
-                all_data[str(assigned_date)].append({
-                    'telecaller_id': telecaller.id,
-                    'telecaller_name': telecaller.name,
-                    'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
-                    'total_jobs': total_jobs,
-                    'completed_jobs': completed_jobs,
-                    'progress': f"{completed_jobs}/{total_jobs} ({progress_percent}%)",
-                    'status': "Completed" if total_jobs == completed_jobs else "Remaining"
-                })
-
-        # Convert grouped data to list for pagination
-        result = []
-        for date, items in sorted(all_data.items(), reverse=True):  # Sort by latest date
-            result.append({
-                'assigned_date': date,
-                'telecaller_jobs': items
+            grouped_by_date[str(assigned_date)].append({
+                "telecaller_id": telecaller.id,
+                "telecaller_name": telecaller.name,
+                "branch_name": telecaller.branch.branch_name if telecaller.branch else None,
+                "enquiry_id": enquiry.id,
+                "candidate_name": enquiry.candidate_name,
+                "contact": enquiry.phone,
+                "email": enquiry.email,
+                "status": "Completed" if has_outcome else "Remaining",
+                "outcome": call.call_outcome if call else None,
+                "assigned_date": str(assigned_date)
             })
 
-        paginated = self.paginate_queryset(result)
-        return self.get_paginated_response(paginated if paginated is not None else result)
+        grouped_response = []
+        for date, leads in grouped_by_date.items():
+            grouped_response.append({
+                "assigned_date": date,
+                "telecaller_jobs": leads
+            })
+
+        grouped_response.sort(key=lambda x: x["assigned_date"], reverse=True)
+
+        # ✅ FIX: Use pagination properly
+        page = self.paginate_queryset(grouped_response)
+        if page is not None:
+            return self.get_paginated_response(page)
+        return Response(grouped_response)
 
         
 class TelecallerJobsView(GenericAPIView):
@@ -476,48 +476,52 @@ class TelecallerJobsView(GenericAPIView):
 
     def get(self, request):
         user = request.user
-
-        # Get this telecaller
         try:
             telecaller = Telecaller.objects.get(account=user)
         except Telecaller.DoesNotExist:
             return Response({"error": "Only telecallers can access this."}, status=403)
 
-        filter_status = request.query_params.get('status')  # "remaining", "completed", or None
-        all_leads = Enquiry.objects.filter(assigned_by=telecaller)
+        filter_status = request.query_params.get('status')  # remaining / completed / None
+        all_leads = Enquiry.objects.filter(assigned_by=telecaller).order_by('-created_at')
 
-        filtered_leads = []
+        from collections import defaultdict
+        grouped_data = defaultdict(list)
 
         for lead in all_leads:
-            # Check if this lead has a call register with a non-empty outcome
+            assigned_date = lead.created_at.date()
             call = CallRegister.objects.filter(enquiry=lead).first()
             has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
+            # Filter by status
             if filter_status == "completed" and not has_outcome:
                 continue
             if filter_status == "remining" and has_outcome:
                 continue
 
-            filtered_leads.append((lead, call))
-
-        # ✅ Paginate the filtered results
-        paginated_leads = self.paginate_queryset(filtered_leads)
-        if paginated_leads is None:
-            paginated_leads = filtered_leads
-
-        data = []
-        for lead, call in paginated_leads:
-            data.append({
+            grouped_data[str(assigned_date)].append({
                 "enquiry_id": lead.id,
                 "name": lead.candidate_name,
                 "contact": lead.phone,
                 "email": lead.email,
-                "status": "Completed" if call and call.call_outcome else "Remaining",
-                "outcome": call.call_outcome if call else None,
-                "assigned_date": lead.created_at.date()  # Assuming `created_at` holds assigned date
+                "status": "Completed" if has_outcome else "Remaining",
+                "outcome": call.call_outcome if call else None
             })
 
-        return self.get_paginated_response(data)
+        # Convert to list of date-wise group
+        result = []
+        for assigned_date, enquiries in grouped_data.items():
+            result.append({
+                "assigned_date": assigned_date,
+                "leads": enquiries
+            })
+
+        result.sort(key=lambda x: x["assigned_date"], reverse=True)
+
+        # ✅ FIX: Use pagination correctly
+        page = self.paginate_queryset(result)
+        if page is not None:
+            return self.get_paginated_response(page)
+        return Response(result)
 
 
 class NotAnsweredCallsView(generics.ListAPIView):

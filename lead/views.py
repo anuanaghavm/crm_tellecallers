@@ -197,16 +197,36 @@ class ClosedEnquiryListView(BaseEnquiryListCreateView):
 # ✅ General Enquiry View (same as before)
 class EnquiryListCreateView(BaseEnquiryListCreateView):
     def get_queryset(self):
+        enquiry_status = getattr(self, 'enquiry_status', None)
+        if enquiry_status:
+            return Enquiry.objects.filter(enquiry_status=enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
         return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
+
     def perform_create(self, serializer):
-        if not serializer.validated_data.get('enquiry_status'):
+        enquiry_status = getattr(self, 'enquiry_status', None)
+        if enquiry_status and not serializer.validated_data.get('enquiry_status'):
             serializer.save(
                 created_by=self.request.user,
-                enquiry_status='Active'
+                enquiry_status=enquiry_status
             )
         else:
             serializer.save(created_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        enquiry_status = getattr(self, 'enquiry_status', None)
+        status_msg = enquiry_status.replace('_', ' ').title() if enquiry_status else "Enquiry"
+
+        return Response({
+            "code": 201,
+            "message": f"{status_msg} created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
 
 # ✅ Retrieve / Update / Delete (same as before)
 class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
