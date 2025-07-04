@@ -3,8 +3,8 @@ from .models import Telecaller
 from login.models import Account
 
 class TelecallerSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)  # Accept during POST
-    password_display = serializers.SerializerMethodField(read_only=True)  # Show in GET if needed
+    password = serializers.CharField(write_only=True)  
+    password_display = serializers.SerializerMethodField(read_only=True)  
     created_by = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
 
@@ -29,25 +29,18 @@ class TelecallerSerializer(serializers.ModelSerializer):
         return obj.account.raw_password if obj.account else None
 
     def create(self, validated_data):
-        # Step 1: Extract password
         password = validated_data.pop('password')
         email = validated_data.get('email')
         role = validated_data.get('role')
-
-        # Step 2: Create Account securely with hashed password
         account = Account(
             email=email,
             role=role,
-            raw_password=password  # only if you want to store the raw version
+            raw_password=password  
         )
         account.set_password(password)
         account.save()
-
-        # Step 3: Sync email with Telecaller model (required!)
         validated_data['account'] = account
         validated_data['email'] = account.email
-
-        # Step 4: Create Telecaller
         return Telecaller.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
@@ -55,20 +48,14 @@ class TelecallerSerializer(serializers.ModelSerializer):
 
         email = validated_data.pop('email', None)
         password = validated_data.pop('password', None)
-
-        # Update email
         if email:
             account.email = email
-            instance.email = email  # keep both in sync
-
-        # Update password securely
+            instance.email = email  
         if password:
             account.set_password(password)
             account.raw_password = password
 
         account.save()
-
-        # Update other fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()

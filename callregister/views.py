@@ -13,7 +13,7 @@ from datetime import timedelta
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.generics import ListAPIView ,GenericAPIView
 from rest_framework import serializers
-
+from collections import defaultdict
 
 # ✅ Custom Pagination Class
 class callsPagination(PageNumberPagination):
@@ -409,51 +409,115 @@ class TelecallerCallSummaryView(ListAPIView):
             response_data.append(summary)
 
         return self.get_paginated_response(response_data)
-    
-class TelecallerJobsView(GenericAPIView):
+
+class AdminJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
-    serializer_class = serializers.Serializer  # Dummy serializer to satisfy Swagger
+    serializer_class = serializers.Serializer  # Dummy for Swagger
 
     def get(self, request):
-        if getattr(self, 'swagger_fake_view', False):  # <-- This fixes Swagger error
+        if getattr(self, 'swagger_fake_view', False):
             return Response()
 
         user = request.user
         if not user.role or user.role.name != 'Admin':
             return Response({'error': 'Only admins can access this data.'}, status=403)
 
+        filter_status = request.query_params.get("status")  # "remaining" or "completed"
+
         telecallers = Telecaller.objects.select_related('branch').order_by('id')
-        paginated_telecallers = self.paginate_queryset(telecallers)
+        all_data = defaultdict(list)
+
+        for telecaller in telecallers:
+            enquiries = Enquiry.objects.filter(assigned_by=telecaller)
+
+            # Group by date
+            date_map = defaultdict(list)
+            for enquiry in enquiries:
+                assigned_date = enquiry.created_at.date()
+                date_map[assigned_date].append(enquiry)
+
+            for assigned_date, enquiries_on_date in date_map.items():
+                total_jobs = len(enquiries_on_date)
+                completed_jobs = sum(CallRegister.objects.filter(enquiry=e).exists() for e in enquiries_on_date)
+
+                if filter_status == "remaining" and total_jobs == completed_jobs:
+                    continue
+                if filter_status == "completed" and (total_jobs == 0 or total_jobs != completed_jobs):
+                    continue
+
+                progress_percent = round((completed_jobs / total_jobs) * 100, 2) if total_jobs else 0
+
+                all_data[str(assigned_date)].append({
+                    'telecaller_id': telecaller.id,
+                    'telecaller_name': telecaller.name,
+                    'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
+                    'total_jobs': total_jobs,
+                    'completed_jobs': completed_jobs,
+                    'progress': f"{completed_jobs}/{total_jobs} ({progress_percent}%)",
+                    'status': "Completed" if total_jobs == completed_jobs else "Remaining"
+                })
+
+        # Convert grouped data to list for pagination
+        result = []
+        for date, items in sorted(all_data.items(), reverse=True):  # Sort by latest date
+            result.append({
+                'assigned_date': date,
+                'telecaller_jobs': items
+            })
+
+        paginated = self.paginate_queryset(result)
+        return self.get_paginated_response(paginated if paginated is not None else result)
+
+        
+class TelecallerJobsView(GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = callsPagination
+
+    def get(self, request):
+        user = request.user
+
+        # Get this telecaller
+        try:
+            telecaller = Telecaller.objects.get(account=user)
+        except Telecaller.DoesNotExist:
+            return Response({"error": "Only telecallers can access this."}, status=403)
+
+        filter_status = request.query_params.get('status')  # "remaining", "completed", or None
+        all_leads = Enquiry.objects.filter(assigned_by=telecaller)
+
+        filtered_leads = []
+
+        for lead in all_leads:
+            # Check if this lead has a call register with a non-empty outcome
+            call = CallRegister.objects.filter(enquiry=lead).first()
+            has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
+
+            if filter_status == "completed" and not has_outcome:
+                continue
+            if filter_status == "remining" and has_outcome:
+                continue
+
+            filtered_leads.append((lead, call))
+
+        # ✅ Paginate the filtered results
+        paginated_leads = self.paginate_queryset(filtered_leads)
+        if paginated_leads is None:
+            paginated_leads = filtered_leads
 
         data = []
-
-        for telecaller in paginated_telecallers:
-            enquiries = Enquiry.objects.filter(assigned_by=telecaller)
-            total_jobs = enquiries.count()
-            completed_jobs = 0
-
-            for enquiry in enquiries:
-                call_log_exists = CallRegister.objects.filter(enquiry=enquiry).exists()
-                if call_log_exists:
-                    completed_jobs += 1
-
-            progress_percent = round((completed_jobs / total_jobs) * 100, 2) if total_jobs else 0
-
+        for lead, call in paginated_leads:
             data.append({
-                'telecaller_id': telecaller.id,
-                'telecaller_name': telecaller.name,
-                'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
-                'total_jobs': total_jobs,
-                'completed_jobs': completed_jobs,
-                'progress': f"{completed_jobs}/{total_jobs} ({progress_percent}%)",
+                "enquiry_id": lead.id,
+                "name": lead.candidate_name,
+                "contact": lead.phone,
+                "email": lead.email,
+                "status": "Completed" if call and call.call_outcome else "Remaining",
+                "outcome": call.call_outcome if call else None,
+                "assigned_date": lead.created_at.date()  # Assuming `created_at` holds assigned date
             })
 
         return self.get_paginated_response(data)
-
-
-
-
 
 
 class NotAnsweredCallsView(generics.ListAPIView):
