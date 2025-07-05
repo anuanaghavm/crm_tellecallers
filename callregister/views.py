@@ -502,7 +502,6 @@ class TelecallerJobsView(GenericAPIView):
         filter_status = request.query_params.get('status', "").lower()
         name_filter = request.query_params.get("name", "").strip().lower()
 
-        # Get all leads assigned to this telecaller
         all_leads = Enquiry.objects.filter(assigned_by=telecaller).order_by('-created_at')
 
         result = []
@@ -513,8 +512,11 @@ class TelecallerJobsView(GenericAPIView):
 
             assigned_date = lead.created_at.date()
             call = CallRegister.objects.filter(enquiry=lead).first()
-            has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
+            # ✅ Make sure this returns only True/False
+            has_outcome = bool(call and call.call_outcome and call.call_outcome.strip())
+
+            # ✅ Correct status filtering
             if filter_status == "completed" and not has_outcome:
                 continue
             if filter_status == "remining" and has_outcome:
@@ -531,21 +533,18 @@ class TelecallerJobsView(GenericAPIView):
                 "assigned_date": str(assigned_date),
             })
 
-        # Sort by assigned date
         result.sort(key=lambda x: x["assigned_date"], reverse=True)
 
-        # Paginate result
         page = self.paginate_queryset(result)
         if page is not None:
             return self.get_paginated_response(page)
 
-        # Final response
         return Response({
             "code": 200,
             "message": "Data fetched successfully",
             "data": result
         })
-        
+
 
 class NotAnsweredCallsView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer
