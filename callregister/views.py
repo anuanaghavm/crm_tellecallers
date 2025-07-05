@@ -495,44 +495,32 @@ class TelecallerJobsView(GenericAPIView):
     def get(self, request):
         user = request.user
         try:
-            telecaller = Telecaller.objects.select_related('branch').get(account=user)
+            telecaller = Telecaller.objects.get(account=user)
         except Telecaller.DoesNotExist:
             return Response({"error": "Only telecallers can access this."}, status=403)
 
         filter_status = request.query_params.get('status', "").lower()
-        branch_name_filter = request.query_params.get("branch_name", "").strip().lower()
-        telecaller_name_filter = request.query_params.get("telecaller_name", "").strip().lower()
-        search_filter = request.query_params.get("search", "").strip().lower()
+        name_filter = request.query_params.get("name", "").strip().lower()
 
-        # ✅ Filter telecaller name (exact or partial)
-        if telecaller_name_filter and telecaller.name.lower() != telecaller_name_filter:
-            return Response({"results": []})  # No match
-
-        if search_filter and search_filter not in telecaller.name.lower():
-            return Response({"results": []})  # No match
-
-        if branch_name_filter:
-            branch_name = telecaller.branch.branch_name.lower() if telecaller.branch else ""
-            if branch_name != branch_name_filter:
-                return Response({"results": []})  # No match
-
-        # ✅ Get all leads assigned to this telecaller
+        # Get all leads assigned to this telecaller
         all_leads = Enquiry.objects.filter(assigned_by=telecaller).order_by('-created_at')
 
-        grouped_data = defaultdict(list)
+        result = []
 
         for lead in all_leads:
+            if name_filter and name_filter not in lead.candidate_name.lower():
+                continue
+
             assigned_date = lead.created_at.date()
             call = CallRegister.objects.filter(enquiry=lead).first()
             has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
-            # ✅ Filter by call status
             if filter_status == "completed" and not has_outcome:
                 continue
             if filter_status == "remining" and has_outcome:
                 continue
 
-            grouped_data[str(assigned_date)].append({
+            result.append({
                 "enquiry_id": lead.id,
                 "name": lead.candidate_name,
                 "contact": lead.phone,
@@ -540,25 +528,24 @@ class TelecallerJobsView(GenericAPIView):
                 "status": "Completed" if has_outcome else "Remaining",
                 "outcome": call.call_outcome if call else None,
                 "telecaller_name": telecaller.name,
-                "branch_name": telecaller.branch.branch_name if telecaller.branch else None,
+                "assigned_date": str(assigned_date),
             })
 
-        # ✅ Convert to list of grouped date-wise leads
-        result = []
-        for assigned_date, enquiries in grouped_data.items():
-            result.append({
-                "assigned_date": assigned_date,
-                "leads": enquiries
-            })
-
+        # Sort by assigned date
         result.sort(key=lambda x: x["assigned_date"], reverse=True)
 
-        # ✅ Paginate result
+        # Paginate result
         page = self.paginate_queryset(result)
         if page is not None:
             return self.get_paginated_response(page)
-        return Response(result)
-    
+
+        # Final response
+        return Response({
+            "code": 200,
+            "message": "Data fetched successfully",
+            "data": result
+        })
+        
 
 class NotAnsweredCallsView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer
