@@ -410,6 +410,7 @@ class TelecallerCallSummaryView(ListAPIView):
 
         return self.get_paginated_response(response_data)
 
+
 class AdminJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
@@ -423,53 +424,70 @@ class AdminJobsView(GenericAPIView):
         if not user.role or user.role.name != 'Admin':
             return Response({'error': 'Only admins can access this data.'}, status=403)
 
-        filter_status = request.query_params.get("status")  # remaining/completed/None
+        # Filters
+        filter_status = request.query_params.get("status", "").lower()
+        branch_name_filter = request.query_params.get("branch_name", "").strip().lower()
+        telecaller_name_filter = request.query_params.get("telecaller_name", "").strip().lower()
 
-        all_enquiries = Enquiry.objects.select_related('assigned_by__branch').order_by('-created_at')
-        grouped_by_date = defaultdict(list)
+        enquiries = Enquiry.objects.select_related('assigned_by__branch').order_by('-created_at')
+        grouped_data = defaultdict(list)
 
-        for enquiry in all_enquiries:
-            assigned_date = enquiry.created_at.date()
+        for enquiry in enquiries:
             telecaller = enquiry.assigned_by
+            if not telecaller:
+                continue
+
+            branch_name = telecaller.branch.branch_name.lower() if telecaller.branch else ""
+
+            # Apply filters
+            if telecaller_name_filter and telecaller.name.lower() != telecaller_name_filter:
+                continue
+            if branch_name_filter and branch_name != branch_name_filter:
+                continue
+
+            assigned_date = enquiry.created_at.date()
+            key = (telecaller.id, assigned_date, telecaller.name, branch_name)
 
             call = CallRegister.objects.filter(enquiry=enquiry).first()
             has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
+            grouped_data[key].append(has_outcome)
+
+        final_data = []
+        for (telecaller_id, assigned_date, telecaller_name, branch_name), outcomes in grouped_data.items():
+            total_jobs = len(outcomes)
+            completed_jobs = sum(1 for status in outcomes if status)
+            progress = f"{completed_jobs}/{total_jobs}"
+            status = "Completed" if completed_jobs == total_jobs else "Remaining"
+
             # Filter by status
-            if filter_status == "completed" and not has_outcome:
+            if filter_status == "completed" and status != "Completed":
                 continue
-            if filter_status == "remining" and has_outcome:
+            if filter_status == "remining" and status != "Remaining":
                 continue
 
-            grouped_by_date[str(assigned_date)].append({
-                "telecaller_id": telecaller.id,
-                "telecaller_name": telecaller.name,
-                "branch_name": telecaller.branch.branch_name if telecaller.branch else None,
-                "enquiry_id": enquiry.id,
-                "candidate_name": enquiry.candidate_name,
-                "contact": enquiry.phone,
-                "email": enquiry.email,
-                "status": "Completed" if has_outcome else "Remaining",
-                "outcome": call.call_outcome if call else None,
-                "assigned_date": str(assigned_date)
+            final_data.append({
+                "telecaller_id": telecaller_id,
+                "telecaller_name": telecaller_name,
+                "branch_name": branch_name,
+                "assigned_date": str(assigned_date),
+                "progress": progress,
+                "status": status
             })
 
-        grouped_response = []
-        for date, leads in grouped_by_date.items():
-            grouped_response.append({
-                "assigned_date": date,
-                "telecaller_jobs": leads
-            })
-
-        grouped_response.sort(key=lambda x: x["assigned_date"], reverse=True)
-
-        # ✅ FIX: Use pagination properly
-        page = self.paginate_queryset(grouped_response)
+        # Sort and paginate
+        final_data.sort(key=lambda x: x["assigned_date"], reverse=True)
+        page = self.paginate_queryset(final_data)
         if page is not None:
             return self.get_paginated_response(page)
-        return Response(grouped_response)
 
-        
+        return Response({
+            "code": 200,
+            "message": "Data fetched successfully",
+            "data": final_data
+        })
+    
+
 class TelecallerJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
@@ -477,14 +495,30 @@ class TelecallerJobsView(GenericAPIView):
     def get(self, request):
         user = request.user
         try:
-            telecaller = Telecaller.objects.get(account=user)
+            telecaller = Telecaller.objects.select_related('branch').get(account=user)
         except Telecaller.DoesNotExist:
             return Response({"error": "Only telecallers can access this."}, status=403)
 
-        filter_status = request.query_params.get('status')  # remaining / completed / None
+        filter_status = request.query_params.get('status', "").lower()
+        branch_name_filter = request.query_params.get("branch_name", "").strip().lower()
+        telecaller_name_filter = request.query_params.get("telecaller_name", "").strip().lower()
+        search_filter = request.query_params.get("search", "").strip().lower()
+
+        # ✅ Filter telecaller name (exact or partial)
+        if telecaller_name_filter and telecaller.name.lower() != telecaller_name_filter:
+            return Response({"results": []})  # No match
+
+        if search_filter and search_filter not in telecaller.name.lower():
+            return Response({"results": []})  # No match
+
+        if branch_name_filter:
+            branch_name = telecaller.branch.branch_name.lower() if telecaller.branch else ""
+            if branch_name != branch_name_filter:
+                return Response({"results": []})  # No match
+
+        # ✅ Get all leads assigned to this telecaller
         all_leads = Enquiry.objects.filter(assigned_by=telecaller).order_by('-created_at')
 
-        from collections import defaultdict
         grouped_data = defaultdict(list)
 
         for lead in all_leads:
@@ -492,7 +526,7 @@ class TelecallerJobsView(GenericAPIView):
             call = CallRegister.objects.filter(enquiry=lead).first()
             has_outcome = call and call.call_outcome and call.call_outcome.strip() != ""
 
-            # Filter by status
+            # ✅ Filter by call status
             if filter_status == "completed" and not has_outcome:
                 continue
             if filter_status == "remining" and has_outcome:
@@ -504,10 +538,12 @@ class TelecallerJobsView(GenericAPIView):
                 "contact": lead.phone,
                 "email": lead.email,
                 "status": "Completed" if has_outcome else "Remaining",
-                "outcome": call.call_outcome if call else None
+                "outcome": call.call_outcome if call else None,
+                "telecaller_name": telecaller.name,
+                "branch_name": telecaller.branch.branch_name if telecaller.branch else None,
             })
 
-        # Convert to list of date-wise group
+        # ✅ Convert to list of grouped date-wise leads
         result = []
         for assigned_date, enquiries in grouped_data.items():
             result.append({
@@ -517,12 +553,12 @@ class TelecallerJobsView(GenericAPIView):
 
         result.sort(key=lambda x: x["assigned_date"], reverse=True)
 
-        # ✅ FIX: Use pagination correctly
+        # ✅ Paginate result
         page = self.paginate_queryset(result)
         if page is not None:
             return self.get_paginated_response(page)
         return Response(result)
-
+    
 
 class NotAnsweredCallsView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer
