@@ -362,11 +362,11 @@ class TelecallerCallSummaryView(ListAPIView):
 
     def get_queryset(self):
         if not self.request.user.role or self.request.user.role.name != 'Admin':
-            return Telecaller.objects.none()  # empty queryset if not admin
+            return Telecaller.objects.none()
 
         branch_name = self.request.query_params.get('branch_name', '').strip()
         telecaller_name = self.request.query_params.get('telecaller_name', '').strip()
-        search_telecaller = self.request.query_params.get('search_telecaller_name', '').strip()
+        search = self.request.query_params.get('search', '').strip()  # <- use 'search'
 
         telecallers = Telecaller.objects.select_related('branch').all()
 
@@ -376,8 +376,8 @@ class TelecallerCallSummaryView(ListAPIView):
         if telecaller_name:
             telecallers = telecallers.filter(name__icontains=telecaller_name)
 
-        if search_telecaller:
-            telecallers = telecallers.filter(name__istartswith=search_telecaller)
+        if search:
+            telecallers = telecallers.filter(name__icontains=search)  # case-insensitive partial match
 
         return telecallers
 
