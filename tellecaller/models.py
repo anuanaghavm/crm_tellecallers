@@ -6,7 +6,7 @@ from branch.models import Branch
 
 class Telecaller(models.Model):
     account = models.OneToOneField(Account, on_delete=models.CASCADE)
-    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True) 
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE) 
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
     contact = models.CharField(max_length=15)
