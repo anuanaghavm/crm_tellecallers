@@ -44,6 +44,7 @@ urlpatterns = [
     path('api/',include("tellecaller.urls")),
     path('api/',include("lead.urls")),
     path('api/',include("callregister.urls")),
+    path('api/',include("notification.urls")),
     path('swagger<str:format>', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='swagger-schema-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

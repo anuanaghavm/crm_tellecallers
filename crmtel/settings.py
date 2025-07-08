@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'callregister',
     'corsheaders',
+    'notification',
 ]
 
 MIDDLEWARE = [
