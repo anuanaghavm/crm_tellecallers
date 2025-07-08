@@ -4,7 +4,7 @@ from .views import (
     CallRegisterDetailView,
     TelecallerCallStatsView,
     TelecallerDashboardView,
-    FollowUpCallsView,
+    FollowUpSearchView,
     WalkInListView,
     CallOutcomeFilterView,TelecallerCallSummaryView,AdminJobsView,NotAnsweredCallsView,TelecallerJobsView
 )
@@ -20,7 +20,7 @@ urlpatterns = [
     path('calls/not-answered/',NotAnsweredCallsView.as_view(), name='not-answered-calls'),
 
     # Outcome-based filtering
-    path('calls/follow-ups/', FollowUpCallsView.as_view(), name='follow-up-calls'),
+    path('calls/follow-ups/', FollowUpSearchView.as_view(), name='follow-up-calls'),
     path('calls/walk-in-list/', WalkInListView.as_view(), name='walk-in-list'),
     path('calls/outcome/<str:outcome>/', CallOutcomeFilterView.as_view(), name='call-outcome-filter'),
     path('calls-summary/',TelecallerCallSummaryView.as_view(),name="tellecaller-calls-summary"),
