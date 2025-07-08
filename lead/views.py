@@ -197,11 +197,25 @@ class ClosedEnquiryListView(BaseEnquiryListCreateView):
 # ✅ General Enquiry View (same as before)
 class EnquiryListCreateView(BaseEnquiryListCreateView):
     def get_queryset(self):
+        user = self.request.user
+        role = getattr(user.role, 'name', None)
+
+        queryset = Enquiry.objects.all()
+
+        # Filter based on logged-in telecaller
+        if role != 'Admin':
+            telecaller = Telecaller.objects.filter(account=user).first()
+            if telecaller:
+                queryset = queryset.filter(assigned_by=telecaller)
+            else:
+                return Enquiry.objects.none()
+
+        # ✅ Use getattr to avoid AttributeError
         enquiry_status = getattr(self, 'enquiry_status', None)
         if enquiry_status:
-            return Enquiry.objects.filter(enquiry_status=enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
-        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+            queryset = queryset.filter(enquiry_status=enquiry_status)
 
+        return queryset.select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
     def perform_create(self, serializer):
         enquiry_status = getattr(self, 'enquiry_status', None)
