@@ -79,31 +79,33 @@ class CallRegisterListCreateView(generics.ListCreateAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # ✅ Follow Up Calls View with Pagination
-class FollowUpSearchView(ListAPIView):
+class FollowUpListView(ListAPIView):
     serializer_class = CallRegisterSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
-    # 🔍 Enable search for candidate name, phone, email
+    # 🔍 Search support
     search_fields = [
-        'enquiry__candidate_name', 
-        'enquiry__phone', 
+        'enquiry__candidate_name',
+        'enquiry__phone',
         'enquiry__email',
-        'telecaller__name'
+        'telecaller__name',
     ]
 
-    # ↕️ Enable ordering by creation or follow-up date
+    # ⬆️⬇️ Ordering support
     ordering_fields = ['created_at', 'follow_up_date']
     ordering = ['-created_at']
 
     def get_queryset(self):
         user = self.request.user
+
+        # 🟢 Get only Follow Up calls
         queryset = CallRegister.objects.select_related(
             'enquiry', 'telecaller', 'telecaller__branch'
         ).filter(call_outcome='Follow Up')
 
-        # 🔒 Restrict to telecaller's data if not admin
+        # 🔐 Restrict non-admins to their own data
         if not (user.role and user.role.name == 'Admin'):
             try:
                 telecaller = Telecaller.objects.get(account=user)
@@ -111,13 +113,16 @@ class FollowUpSearchView(ListAPIView):
             except Telecaller.DoesNotExist:
                 return CallRegister.objects.none()
 
-        # ✅ Custom Filters
+        # ✅ Filters
+        candidate_name = self.request.query_params.get('candidate_name', '').strip()
         phone = self.request.query_params.get('phone', '').strip()
         email = self.request.query_params.get('email', '').strip()
-        candidate_name = self.request.query_params.get('candidate_name', '').strip()
         call_status = self.request.query_params.get('call_status', '').strip()
         follow_up_date = self.request.query_params.get('follow_up_date', '').strip()
         telecaller_name = self.request.query_params.get('telecaller_name', '').strip()
+
+        if candidate_name:
+            queryset = queryset.filter(enquiry__candidate_name__icontains=candidate_name)
 
         if phone:
             queryset = queryset.filter(enquiry__phone__icontains=phone)
@@ -125,24 +130,20 @@ class FollowUpSearchView(ListAPIView):
         if email:
             queryset = queryset.filter(enquiry__email__icontains=email)
 
-        if candidate_name:
-            queryset = queryset.filter(enquiry__candidate_name__icontains=candidate_name)
-
         if call_status:
             queryset = queryset.filter(call_status__iexact=call_status)
-
-        if telecaller_name:
-            queryset = queryset.filter(telecaller__name__icontains=telecaller_name)
 
         if follow_up_date:
             try:
                 date_obj = datetime.strptime(follow_up_date, '%Y-%m-%d').date()
                 queryset = queryset.filter(follow_up_date=date_obj)
             except ValueError:
-                pass  # ignore invalid date
+                pass
+
+        if telecaller_name:
+            queryset = queryset.filter(telecaller__name__icontains=telecaller_name)
 
         return queryset
-
 # ✅ Walk-in List View with Pagination
 class WalkInListView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer
@@ -586,22 +587,27 @@ class NotAnsweredCallsView(generics.ListAPIView):
     pagination_class = callsPagination
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
-    # 🔍 Search in candidate name, phone, or notes
-    search_fields = ['enquiry__candidate_name', 'enquiry__phone', 'notes']
+    # 🔍 Search functionality
+    search_fields = [
+        'enquiry__candidate_name',
+        'enquiry__phone',
+        'enquiry__email',
+        'telecaller__name',
+    ]
 
-    # ↕️ Allow ordering
+    # ↕️ Ordering options
     ordering_fields = ['call_start_time', 'created_at']
     ordering = ['-created_at']
 
     def get_queryset(self):
         user = self.request.user
 
-        # 📌 Base: Only "Not Answered" calls
+        # 📌 Base queryset: Only Not Answered calls
         queryset = CallRegister.objects.select_related(
             'enquiry', 'telecaller', 'telecaller__branch'
         ).filter(call_status__iexact='Not Answered')
 
-        # 🛡️ Restrict to telecaller's own calls if not Admin
+        # 🛡️ Restrict to telecaller's data if not admin
         if user.role and user.role.name != 'Admin':
             try:
                 telecaller = Telecaller.objects.get(account=user)
@@ -609,26 +615,34 @@ class NotAnsweredCallsView(generics.ListAPIView):
             except Telecaller.DoesNotExist:
                 return CallRegister.objects.none()
 
-        # ✅ Filters
-        branch_name     = self.request.query_params.get('branch_name', '').strip()
+        # ✅ Apply filters
+        candidate_name = self.request.query_params.get('candidate_name', '').strip()
+        phone = self.request.query_params.get('phone', '').strip()
+        email = self.request.query_params.get('email', '').strip()
+        call_status = self.request.query_params.get('call_status', '').strip()
+        follow_up_date = self.request.query_params.get('follow_up_date', '').strip()
         telecaller_name = self.request.query_params.get('telecaller_name', '').strip()
-        enquiry_date    = self.request.query_params.get('enquiry_date', '').strip()
-        enquiry_status  = self.request.query_params.get('enquiry_status', '').strip()
 
-        if branch_name:
-            queryset = queryset.filter(telecaller__branch__branch_name__icontains=branch_name)
+        if candidate_name:
+            queryset = queryset.filter(enquiry__candidate_name__icontains=candidate_name)
+
+        if phone:
+            queryset = queryset.filter(enquiry__phone__icontains=phone)
+
+        if email:
+            queryset = queryset.filter(enquiry__email__icontains=email)
+
+        if call_status:
+            queryset = queryset.filter(call_status__iexact=call_status)
+
+        if follow_up_date:
+            try:
+                date_obj = datetime.strptime(follow_up_date, '%Y-%m-%d').date()
+                queryset = queryset.filter(follow_up_date=date_obj)
+            except ValueError:
+                pass
 
         if telecaller_name:
             queryset = queryset.filter(telecaller__name__icontains=telecaller_name)
-
-        if enquiry_date:
-            try:
-                date_obj = datetime.strptime(enquiry_date, '%Y-%m-%d').date()
-                queryset = queryset.filter(enquiry__created_at__date=date_obj)
-            except ValueError:
-                pass  # Ignore invalid date input
-
-        if enquiry_status:
-            queryset = queryset.filter(enquiry__enquiry_status__iexact=enquiry_status)
 
         return queryset

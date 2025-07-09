@@ -1,5 +1,6 @@
+# serializers.py
 from rest_framework import serializers
-from .models import Enquiry, Mettad
+from .models import Enquiry, Mettad, Course, Service
 from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
@@ -16,7 +17,17 @@ class MettadSerializer(serializers.ModelSerializer):
         model = Mettad
         fields = ['id', 'name']
 
-# Updated EnquirySerializer with Mettad integration
+class CourseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Course
+        fields = ['id', 'name', 'is_active', 'created_at']
+
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = ['id', 'name', 'is_active', 'created_at']
+
+# Updated EnquirySerializer with Course and Service integration
 class EnquirySerializer(serializers.ModelSerializer):
     assigned_by_id = serializers.PrimaryKeyRelatedField(
         queryset=Telecaller.objects.all(), source='assigned_by', write_only=True, required=False
@@ -32,6 +43,16 @@ class EnquirySerializer(serializers.ModelSerializer):
         queryset=Mettad.objects.all(), source='Mettad', write_only=True, required=False
     )
     mettad_name = serializers.SerializerMethodField()
+    
+    # Course fields
+    preferred_course_id = serializers.PrimaryKeyRelatedField(
+        queryset=Course.objects.all(), source='preferred_course', write_only=True, required=False
+    )
+    required_service_id = serializers.PrimaryKeyRelatedField(
+        queryset=Service.objects.all(), source='required_service', write_only=True, required=False
+    )
+    preferred_course_name = serializers.SerializerMethodField()
+    required_service_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Enquiry
@@ -41,8 +62,6 @@ class EnquirySerializer(serializers.ModelSerializer):
             'phone',
             'phone2',
             'email',
-            'preferred_course',
-            'required_service',
             'feedback',
             'follow_up_on',
             'enquiry_status',
@@ -58,6 +77,14 @@ class EnquirySerializer(serializers.ModelSerializer):
             # Mettad fields
             'mettad_id',
             'mettad_name',
+            
+            # Course fields
+            'preferred_course_id',
+            'preferred_course_name',
+            
+            # Service fields
+            'required_service_id',
+            'required_service_name',
         ]
 
     def get_created_by_role(self, obj):
@@ -79,6 +106,12 @@ class EnquirySerializer(serializers.ModelSerializer):
 
     def get_mettad_name(self, obj):
         return obj.Mettad.name if obj.Mettad else None
+    
+    def get_preferred_course_name(self, obj):
+        return obj.preferred_course.name if obj.preferred_course else None
+    
+    def get_required_service_name(self, obj):
+        return obj.required_service.name if obj.required_service else None
 
     def validate(self, data):
         request_user = self.context['request'].user
@@ -102,3 +135,7 @@ class EnquirySerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
+    
+
+
+

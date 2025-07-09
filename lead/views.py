@@ -8,10 +8,16 @@ from django_filters import rest_framework as django_filters
 from rest_framework.views import APIView
 from django.db.models import Q
 from tellecaller.models import Telecaller
-from .models import Enquiry, Mettad
-from .serializers import EnquirySerializer, MettadSerializer
+from .models import Enquiry, Mettad, Course, Service
+from .serializers import EnquirySerializer, MettadSerializer, CourseSerializer, ServiceSerializer
 from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from django.http import HttpResponse
 
 # ✅ Pagination
 class LeadsPagination(PageNumberPagination):
@@ -70,7 +76,6 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
         'assigned_by__name',
         'Mettad__name'
     ]
-
 
     def get_queryset(self):
         if self.enquiry_status:
@@ -187,6 +192,197 @@ class MettadDetailView(RetrieveUpdateDestroyAPIView):
             "message": "Mettad deleted successfully"
         }, status=status.HTTP_200_OK)
 
+# ✅ Course CRUD Operations
+class CourseListCreateView(ListCreateAPIView):
+    queryset = Course.objects.all().order_by('name')
+    serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
+
+    def get_queryset(self):
+        queryset = Course.objects.all().order_by('name')
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response({
+            "code": 201,
+            "message": "Course created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Courses fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
+class CourseDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Course.objects.all()
+    serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "code": 200,
+            "message": "Course details fetched successfully",
+            "data": serializer.data
+        })
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({
+            "code": 200,
+            "message": "Course updated successfully",
+            "data": serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Check if course is being used in any enquiries
+        if instance.enquiries.exists():
+            return Response({
+                "code": 400,
+                "message": "Cannot delete course. It is being used in enquiries."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        self.perform_destroy(instance)
+        return Response({
+            "code": 200,
+            "message": "Course deleted successfully"
+        }, status=status.HTTP_200_OK)
+
+# ✅ Service CRUD Operations
+class ServiceListCreateView(ListCreateAPIView):
+    queryset = Service.objects.all().order_by('name')
+    serializer_class = ServiceSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
+
+    def get_queryset(self):
+        queryset = Service.objects.all().order_by('name')
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        return Response({
+            "code": 201,
+            "message": "Service created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Services fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
+class ServiceDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = Service.objects.all()
+    serializer_class = ServiceSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "code": 200,
+            "message": "Service details fetched successfully",
+            "data": serializer.data
+        })
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+
+        return Response({
+            "code": 200,
+            "message": "Service updated successfully",
+            "data": serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        # Check if service is being used in any enquiries
+        if instance.enquiries.exists():
+            return Response({
+                "code": 400,
+                "message": "Cannot delete service. It is being used in enquiries."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        self.perform_destroy(instance)
+        return Response({
+            "code": 200,
+            "message": "Service deleted successfully"
+        }, status=status.HTTP_200_OK)
+
+# ✅ Additional utility views for getting only active courses/services
+class ActiveCourseListView(ListCreateAPIView):
+    queryset = Course.objects.filter(is_active=True).order_by('name')
+    serializer_class = CourseSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Active courses fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
+class ActiveServiceListView(ListCreateAPIView):
+    queryset = Service.objects.filter(is_active=True).order_by('name')
+    serializer_class = ServiceSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Active services fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
 # ✅ Active & Closed Enquiry Views (same as before)
 class ActiveEnquiryListView(BaseEnquiryListCreateView):
     enquiry_status = 'Active'
@@ -240,7 +436,6 @@ class EnquiryListCreateView(BaseEnquiryListCreateView):
             "message": f"{status_msg} created successfully",
             "data": serializer.data
         }, status=status.HTTP_201_CREATED)
-
 
 # ✅ Retrieve / Update / Delete (same as before)
 class EnquiryDetailView(RetrieveUpdateDestroyAPIView):
@@ -353,3 +548,5 @@ class EnquiryStatisticsView(APIView):
             "message": "Enquiry statistics fetched successfully",
             "data": stats
         })
+    
+

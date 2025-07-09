@@ -8,6 +8,12 @@ from .views import (
     EnquiryStatisticsView,
     MettadListCreateView,
     MettadDetailView,
+    CourseListCreateView,
+    CourseDetailView,
+    ActiveCourseListView,
+    ServiceListCreateView,
+    ServiceDetailView,
+    ActiveServiceListView,
 )
 
 urlpatterns = [
@@ -18,7 +24,14 @@ urlpatterns = [
     path('enquiries/<int:pk>/', EnquiryDetailView.as_view(), name='enquiry-detail'),
     path('enquiries/summary/', EnquirySummaryByTelecaller.as_view(), name='enquiry-summary'),
     path('enquiries/statistics/', EnquiryStatisticsView.as_view(), name='enquiry-statistics'),
-    
+    path('courses/', CourseListCreateView.as_view(), name='course-list-create'),
+    path('courses/<int:pk>/', CourseDetailView.as_view(), name='course-detail'),
+    path('courses/active/', ActiveCourseListView.as_view(), name='active-course-list'),
+    path('services/', ServiceListCreateView.as_view(), name='service-list-create'),
+    path('services/<int:pk>/', ServiceDetailView.as_view(), name='service-detail'),
+    path('services/active/', ActiveServiceListView.as_view(), name='active-service-list'),
+
+
     # Mettad URLs
     path('mettads/', MettadListCreateView.as_view(), name='mettad-list-create'),
     path('mettads/<int:pk>/', MettadDetailView.as_view(), name='mettad-detail'),
