@@ -22,10 +22,14 @@ class LoginSerializer(serializers.Serializer):
         except Account.DoesNotExist:
             raise serializers.ValidationError("Invalid email")
 
+        if not user.is_active:
+            raise serializers.ValidationError("Account is inactive")
+
         if not user.check_password(data['password']):
             raise serializers.ValidationError("Incorrect password")
 
         return user
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
