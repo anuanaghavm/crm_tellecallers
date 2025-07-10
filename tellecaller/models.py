@@ -6,7 +6,7 @@ from branch.models import Branch
 
 class Telecaller(models.Model):
     account = models.OneToOneField(Account, on_delete=models.CASCADE)
-    branch = models.ForeignKey(Branch, on_delete=models.CASCADE) 
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE)
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
     contact = models.CharField(max_length=15)
@@ -15,6 +15,15 @@ class Telecaller(models.Model):
     status = models.CharField(max_length=20, choices=[('active', 'Active'), ('deactivated', 'Deactivated')], default='active')
     created_date = models.DateTimeField(default=now)
     created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_telecallers')
+
+    def delete(self, *args, **kwargs):
+        print("Telecaller delete called — also deleting account.")
+        account = self.account
+        super().delete(*args, **kwargs)
+        if account:
+            account.delete()
+
+
 
     def __str__(self):
         return self.name

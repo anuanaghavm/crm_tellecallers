@@ -51,7 +51,6 @@ class CallRegisterSerializer(serializers.ModelSerializer):
             'candidate_name': obj.enquiry.candidate_name,
             'phone': obj.enquiry.phone,
             'email': obj.enquiry.email,
-            'preferred_course': obj.enquiry.preferred_course,
             'enquiry_status': obj.enquiry.enquiry_status,
         }
 
