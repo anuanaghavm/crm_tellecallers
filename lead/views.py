@@ -78,9 +78,25 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     ]
 
     def get_queryset(self):
-        if self.enquiry_status:
-            return Enquiry.objects.filter(enquiry_status=self.enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
-        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+        user = self.request.user
+        role = getattr(user.role, 'name', None)
+
+        queryset = Enquiry.objects.all()
+
+        # ✅ Filter by telecaller if not admin
+        if role != 'Admin':
+            telecaller = Telecaller.objects.filter(account=user).first()
+            if telecaller:
+                queryset = queryset.filter(assigned_by=telecaller)
+            else:
+                return Enquiry.objects.none()
+
+        # ✅ Filter by enquiry status if specified
+        if hasattr(self, 'enquiry_status') and self.enquiry_status:
+            queryset = queryset.filter(enquiry_status=self.enquiry_status)
+
+        return queryset.select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+
 
     def perform_create(self, serializer):
         if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
