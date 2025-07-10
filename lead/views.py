@@ -12,7 +12,12 @@ from .models import Enquiry, Mettad, Course, Service
 from .serializers import EnquirySerializer, MettadSerializer, CourseSerializer, ServiceSerializer
 from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
-
+from rest_framework import status
+import pandas as pd
+from .models import Enquiry, Mettad, Course, Service
+from tellecaller.models import Telecaller
+from rest_framework.parsers import MultiPartParser
+from django.db.models import Count, Q
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -550,3 +555,71 @@ class EnquiryStatisticsView(APIView):
         })
     
 
+
+
+
+
+
+class EnquiryImportAPIView(APIView):
+    parser_classes = [MultiPartParser]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"message": "No file uploaded"}, status=400)
+
+        try:
+            df = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
+        except Exception as e:
+            return Response({
+                "code": 400,
+                "message": f"Failed to read file: {str(e)}"
+            }, status=400)
+
+        created = []
+        warnings = []
+
+        for idx, row in df.iterrows():
+            try:
+                assigned_by = None
+                if pd.notna(row.get('Assigned to')):
+                    assigned_by = Telecaller.objects.filter(name=row['Assigned to']).first()
+                    if not assigned_by:
+                        warnings.append(f"Row {idx + 2}: Telecaller '{row['Assigned to']}' not found. Assigned_by set to None.")
+
+                preferred_course = None
+                if pd.notna(row.get('Preferred Course')):
+                    preferred_course = Course.objects.filter(name=row['Preferred Course']).first()
+                    if not preferred_course:
+                        warnings.append(f"Row {idx + 2}: Course '{row['Preferred Course']}' not found.")
+
+                required_service = None
+                if pd.notna(row.get('Service')):
+                    required_service = Service.objects.filter(name=row['Service']).first()
+                    if not required_service:
+                        warnings.append(f"Row {idx + 2}: Service '{row['Service']}' not found.")
+
+                enquiry = Enquiry.objects.create(
+                    candidate_name=row['Name'],
+                    phone=row['Phone'],
+                    email='',
+                    preferred_course=preferred_course,
+                    required_service=required_service,
+                    enquiry_status='Active',
+                    feedback=None,
+                    follow_up_on=None,
+                    created_by=request.user,
+                    assigned_by=assigned_by,
+                )
+                created.append(enquiry)
+
+            except Exception as e:
+                warnings.append(f"Row {idx + 2}: Failed - {str(e)}")
+
+        return Response({
+            "code": 201 if created else 207,
+            "message": f"{len(created)} enquiries imported successfully",
+            "successfully_imported": len(created),
+            "warnings": warnings
+        }, status=201 if created else 207)

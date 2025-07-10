@@ -13,6 +13,7 @@ from .views import (
     ActiveCourseListView,
     ServiceListCreateView,
     ServiceDetailView,
+    EnquiryImportAPIView,
     ActiveServiceListView,
 )
 
@@ -30,6 +31,7 @@ urlpatterns = [
     path('services/', ServiceListCreateView.as_view(), name='service-list-create'),
     path('services/<int:pk>/', ServiceDetailView.as_view(), name='service-detail'),
     path('services/active/', ActiveServiceListView.as_view(), name='active-service-list'),
+    path('enquiries/import/', EnquiryImportAPIView.as_view(), name='enquiry-import'),
 
 
     # Mettad URLs

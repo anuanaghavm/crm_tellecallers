@@ -15,6 +15,11 @@ from rest_framework.generics import ListAPIView ,GenericAPIView
 from rest_framework import serializers
 from collections import defaultdict
 from datetime import datetime
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import CallRegister
+from lead.models import Enquiry
 
 
 # ✅ Custom Pagination Class
@@ -646,3 +651,35 @@ class NotAnsweredCallsView(generics.ListAPIView):
             queryset = queryset.filter(telecaller__name__icontains=telecaller_name)
 
         return queryset
+
+
+
+
+class EnquiryCallHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, enquiry_id):
+        try:
+            enquiry = Enquiry.objects.get(id=enquiry_id)
+        except Enquiry.DoesNotExist:
+            return Response({"error": "Enquiry not found."}, status=404)
+
+        calls = CallRegister.objects.filter(enquiry=enquiry).select_related('telecaller').order_by('-call_start_time')
+
+        call_data = []
+        for call in calls:
+            call_data.append({
+                "telecaller": call.telecaller.name if call.telecaller else None,
+                "call_status": call.call_status,
+                "call_type": call.call_type,
+                "call_outcome": call.call_outcome,
+                "call_start_time": call.call_start_time,
+                "call_duration": call.call_duration,
+                "feedback": call.response if hasattr(call, 'response') else "",  # Adjust field name if needed
+            })
+
+        return Response({
+            "enquiry_id": enquiry_id,
+            "candidate_name": enquiry.candidate_name,
+            "call_history": call_data,
+        })
