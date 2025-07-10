@@ -83,9 +83,25 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     ]
 
     def get_queryset(self):
-        if self.enquiry_status:
-            return Enquiry.objects.filter(enquiry_status=self.enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
-        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+        user = self.request.user
+        role = getattr(user.role, 'name', None)
+
+        queryset = Enquiry.objects.all()
+
+        # ✅ Filter assigned enquiries for non-admin users
+        if role != 'Admin':
+            telecaller = Telecaller.objects.filter(account=user).first()
+            if telecaller:
+                queryset = queryset.filter(assigned_by=telecaller)
+            else:
+                return Enquiry.objects.none()
+
+        # ✅ Filter by enquiry_status if set on the class
+        enquiry_status = getattr(self, 'enquiry_status', None)
+        if enquiry_status:
+            queryset = queryset.filter(enquiry_status=enquiry_status)
+
+        return queryset.select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
     def perform_create(self, serializer):
         if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
@@ -131,6 +147,7 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
             "data": serializer.data,
             "total": queryset.count()
         })
+
 
 # ✅ Mettad List/Create View
 class MettadListCreateView(ListCreateAPIView):

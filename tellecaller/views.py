@@ -6,6 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from .models import Telecaller
 from .serializers import TelecallerSerializer
 from roles.models import Role
+from django.db.models import Q
 
 class TelecallerPagination(PageNumberPagination):
     page_size = 10
@@ -29,11 +30,22 @@ class TelecallerListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        telecallers = Telecaller.objects.all().order_by('-id')
+        search_query = request.query_params.get('search', '')
+
+        # You can adjust these fields as per your model
+        if search_query:
+            telecallers = Telecaller.objects.filter(
+                Q(name__icontains=search_query) 
+            
+            ).order_by('-id')
+        else:
+            telecallers = Telecaller.objects.all().order_by('-id')
+
         paginator = TelecallerPagination()
         result_page = paginator.paginate_queryset(telecallers, request)
         serializer = TelecallerSerializer(result_page, many=True)
         return paginator.get_paginated_response(serializer.data)
+
 
     def post(self, request):
         serializer = TelecallerSerializer(data=request.data)

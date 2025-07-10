@@ -442,14 +442,13 @@ class TelecallerCallSummaryView(ListAPIView):
                 'answered': calls.filter(call_status='answered').count(),
                 'not_answered': calls.filter(call_status='Not Answered').count(),
                 'walk_in_list': calls.filter(call_outcome='walk_in_list').count(),
-                'positive': calls.filter(call_outcome__in=['Interested', 'Converted']).count(),
-                'negative': calls.filter(call_outcome__in=['Not Interested', 'Do Not Call']).count(),
+                # ✅ Renamed positive -> qualified
+                'qualified': calls.filter(call_outcome__in=['Interested', 'Converted']).count(),
+                # ✅ Renamed negative -> not_interested
+                'not_interested': calls.filter(call_outcome__in=['Not Interested', 'Do Not Call']).count(),
             }
-
             response_data.append(summary)
-
         return self.get_paginated_response(response_data)
-
 
 class AdminJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
