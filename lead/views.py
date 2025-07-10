@@ -83,25 +83,9 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     ]
 
     def get_queryset(self):
-        user = self.request.user
-        role = getattr(user.role, 'name', None)
-
-        queryset = Enquiry.objects.all()
-
-        # ✅ Filter by telecaller if not admin
-        if role != 'Admin':
-            telecaller = Telecaller.objects.filter(account=user).first()
-            if telecaller:
-                queryset = queryset.filter(assigned_by=telecaller)
-            else:
-                return Enquiry.objects.none()
-
-        # ✅ Filter by enquiry status if specified
-        if hasattr(self, 'enquiry_status') and self.enquiry_status:
-            queryset = queryset.filter(enquiry_status=self.enquiry_status)
-
-        return queryset.select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
-
+        if self.enquiry_status:
+            return Enquiry.objects.filter(enquiry_status=self.enquiry_status).select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
+        return Enquiry.objects.all().select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
     def perform_create(self, serializer):
         if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
@@ -588,21 +572,21 @@ class EnquiryImportAPIView(APIView):
         try:
             df = pd.read_excel(file) if file.name.endswith('.xlsx') else pd.read_csv(file)
         except Exception as e:
-            return Response({
-                "code": 400,
-                "message": f"Failed to read file: {str(e)}"
-            }, status=400)
+            return Response({"code": 400, "message": f"Failed to read file: {str(e)}"}, status=400)
+
+        # ✅ Fetch all telecallers
+        telecallers = list(Telecaller.objects.all())
+        total_telecallers = len(telecallers)
+        telecaller_index = 0
 
         created = []
         warnings = []
 
         for idx, row in df.iterrows():
             try:
-                assigned_by = None
-                if pd.notna(row.get('Assigned to')):
-                    assigned_by = Telecaller.objects.filter(name=row['Assigned to']).first()
-                    if not assigned_by:
-                        warnings.append(f"Row {idx + 2}: Telecaller '{row['Assigned to']}' not found. Assigned_by set to None.")
+                # ✅ Round-robin telecaller assignment
+                assigned_by = telecallers[telecaller_index] if total_telecallers > 0 else None
+                telecaller_index = (telecaller_index + 1) % total_telecallers
 
                 preferred_course = None
                 if pd.notna(row.get('Preferred Course')):
@@ -619,7 +603,7 @@ class EnquiryImportAPIView(APIView):
                 enquiry = Enquiry.objects.create(
                     candidate_name=row['Name'],
                     phone=row['Phone'],
-                    email='',
+                    email=row.get('Email', ''),
                     preferred_course=preferred_course,
                     required_service=required_service,
                     enquiry_status='Active',
