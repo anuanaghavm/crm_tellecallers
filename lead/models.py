@@ -36,7 +36,7 @@ class Service(models.Model):
 class Enquiry(models.Model): 
     ENQUIRY_STATUS_CHOICES = [
         ('Active', 'Active'),
-        ('Closed', 'Closed'),
+        ('Not interested', 'Not interested'),
     ]
 
     candidate_name = models.CharField(max_length=255)

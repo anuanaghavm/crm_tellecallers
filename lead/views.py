@@ -410,8 +410,7 @@ class ActiveEnquiryListView(BaseEnquiryListCreateView):
     enquiry_status = 'Active'
 
 class ClosedEnquiryListView(BaseEnquiryListCreateView):
-    enquiry_status = 'Closed'
-
+    enquiry_status = 'Not interested'
 # ✅ General Enquiry View (same as before)
 class EnquiryListCreateView(BaseEnquiryListCreateView):
     def get_queryset(self):
@@ -624,10 +623,11 @@ class EnquiryImportAPIView(APIView):
                     preferred_course=preferred_course,
                     required_service=required_service,
                     enquiry_status='Active',
-                    feedback=None,
                     follow_up_on=None,
                     created_by=request.user,
                     assigned_by=assigned_by,
+                    feedback=row['Feedback'] if pd.notna(row.get('Feedback')) else '',
+
                 )
                 created.append(enquiry)
 
@@ -640,3 +640,60 @@ class EnquiryImportAPIView(APIView):
             "successfully_imported": len(created),
             "warnings": warnings
         }, status=201 if created else 207)
+# conversions/views.py
+
+import requests
+import time
+import hashlib
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+
+def hash_data(data):
+    """Hash data using SHA-256 as required by Meta"""
+    return hashlib.sha256(data.strip().lower().encode()).hexdigest()
+
+
+class MetaConversionAPIView(APIView):
+    def post(self, request):
+        try:
+            email = request.data.get("email")
+            phone = request.data.get("phone")
+            event_name = request.data.get("event_name", "PageView")
+
+            if not email:
+                return Response({"error": "Email is required"}, status=400)
+
+            pixel_id = settings.META_PIXEL_ID
+            access_token = settings.META_ACCESS_TOKEN
+            event_time = int(time.time())
+
+            payload = {
+                "data": [
+                    {
+                        "event_name": event_name,
+                        "event_time": event_time,
+                        "action_source": "website",
+                        "user_data": {
+                            "em": [hash_data(email)],
+                            "ph": [hash_data(phone)] if phone else [],
+                            "client_ip_address": request.META.get("REMOTE_ADDR"),
+                            "client_user_agent": request.META.get("HTTP_USER_AGENT"),
+                        }
+                    }
+                ]
+            }
+
+            url = f"https://graph.facebook.com/v19.0/{pixel_id}/events?access_token={access_token}"
+            response = requests.post(url, json=payload)
+
+            return Response({
+                "sent_to_meta": payload,
+                "meta_response": response.json(),
+                "status_code": response.status_code
+            })
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)

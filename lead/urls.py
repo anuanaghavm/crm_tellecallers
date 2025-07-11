@@ -15,6 +15,7 @@ from .views import (
     ServiceDetailView,
     EnquiryImportAPIView,
     ActiveServiceListView,
+    MetaConversionAPIView
 )
 
 urlpatterns = [
@@ -32,6 +33,7 @@ urlpatterns = [
     path('services/<int:pk>/', ServiceDetailView.as_view(), name='service-detail'),
     path('services/active/', ActiveServiceListView.as_view(), name='active-service-list'),
     path('enquiries/import/', EnquiryImportAPIView.as_view(), name='enquiry-import'),
+    path('meta-conversion/', MetaConversionAPIView.as_view(), name='meta-conversion'),
 
 
     # Mettad URLs
