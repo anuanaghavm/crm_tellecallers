@@ -23,6 +23,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
+import time
+import hashlib
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+import requests
 
 # ✅ Pagination
 class LeadsPagination(PageNumberPagination):
@@ -641,14 +648,6 @@ class EnquiryImportAPIView(APIView):
             "warnings": warnings
         }, status=201 if created else 207)
 # conversions/views.py
-
-import requests
-import time
-import hashlib
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 
 
 def hash_data(data):
