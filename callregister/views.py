@@ -352,15 +352,19 @@ class TelecallerDashboardView(generics.GenericAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        today = timezone.now().date()
-
+        # ✅ Total calls made by this telecaller
         total_calls = CallRegister.objects.filter(telecaller=telecaller).count()
+
+        # ✅ Enquiries assigned to this telecaller
         total_leads = Enquiry.objects.filter(assigned_by=telecaller).count()
-        pending_followups = CallRegister.objects.filter(
+
+        # ✅ All follow-up calls regardless of date
+        total_followups = CallRegister.objects.filter(
             telecaller=telecaller,
-            call_outcome='Follow Up',
-            follow_up_date__lte=today
+            call_outcome='Follow Up'
         ).count()
+
+        # ✅ All walk-in list calls regardless of date
         walkin_count = CallRegister.objects.filter(
             telecaller=telecaller,
             call_outcome='walk_in_list'
@@ -370,10 +374,9 @@ class TelecallerDashboardView(generics.GenericAPIView):
             'dashboard_type': 'telecaller',
             'total_calls': total_calls,
             'total_leads': total_leads,
-            'pending_followups': pending_followups,
+            'total_followups': total_followups,
             'walkin_list': walkin_count,
         })
-
     
 class TelecallerCallSummaryView(ListAPIView):
     permission_classes = [IsAuthenticated]
