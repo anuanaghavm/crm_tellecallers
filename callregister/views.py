@@ -17,7 +17,6 @@ from collections import defaultdict
 from datetime import datetime
 from rest_framework.views import APIView
 
-
 # ✅ Custom Pagination Class
 class callsPagination(PageNumberPagination):
     page_size = 10
@@ -323,116 +322,6 @@ class TelecallerCallStatsView(generics.GenericAPIView):
             stats['conversion_rate'] = 0
 
         return Response(stats)
-
-# ✅ Telecaller Dashboard View
-class TelecallerDashboardView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
-
-        if user.role and user.role.name == 'Admin':
-            total_calls = CallRegister.objects.count()
-            total_leads = Enquiry.objects.count()
-            total_telecallers = Telecaller.objects.count()
-
-            return Response({
-                'dashboard_type': 'admin',
-                'total_calls': total_calls,
-                'total_leads': total_leads,
-                'total_telecallers': total_telecallers,
-            })
-
-        # If telecaller
-        try:
-            telecaller = Telecaller.objects.get(account=user)
-        except Telecaller.DoesNotExist:
-            return Response(
-                {'error': 'Only telecallers can access dashboard.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # ✅ Total calls made by this telecaller
-        total_calls = CallRegister.objects.filter(telecaller=telecaller).count()
-
-        # ✅ Enquiries assigned to this telecaller
-        total_leads = Enquiry.objects.filter(assigned_by=telecaller).count()
-
-        # ✅ All follow-up calls regardless of date
-        total_followups = CallRegister.objects.filter(
-            telecaller=telecaller,
-            call_outcome='Follow Up'
-        ).count()
-
-        # ✅ All walk-in list calls regardless of date
-        walkin_count = CallRegister.objects.filter(
-            telecaller=telecaller,
-            call_outcome='walk_in_list'
-        ).count()
-
-        return Response({
-            'dashboard_type': 'telecaller',
-            'total_calls': total_calls,
-            'total_leads': total_leads,
-            'total_followups': total_followups,
-            'walkin_list': walkin_count,
-        })
-    
-class TelecallerCallSummaryView(ListAPIView):
-    permission_classes = [IsAuthenticated]
-    pagination_class = callsPagination
-
-    def get_queryset(self):
-        if not self.request.user.role or self.request.user.role.name != 'Admin':
-            return Telecaller.objects.none()
-
-        branch_name = self.request.query_params.get('branch_name', '').strip()
-        telecaller_name = self.request.query_params.get('telecaller_name', '').strip()
-        search = self.request.query_params.get('search', '').strip()  # <- use 'search'
-
-        telecallers = Telecaller.objects.select_related('branch').all()
-
-        if branch_name:
-            telecallers = telecallers.filter(branch__branch_name__icontains=branch_name)
-
-        if telecaller_name:
-            telecallers = telecallers.filter(name__icontains=telecaller_name)
-
-        if search:
-            telecallers = telecallers.filter(name__icontains=search)  # case-insensitive partial match
-
-        return telecallers
-
-    def list(self, request, *args, **kwargs):
-        if not request.user.role or request.user.role.name != 'Admin':
-            return Response({'error': 'Only admin can access this data.'}, status=403)
-
-        queryset = self.paginate_queryset(self.get_queryset())
-
-        response_data = []
-        for telecaller in queryset:
-            calls = CallRegister.objects.filter(telecaller=telecaller)
-
-            summary = {
-                'telecaller_id': telecaller.id,
-                'telecaller_name': telecaller.name,
-                'branch_name': telecaller.branch.branch_name if telecaller.branch else None,
-                'total_calls': calls.count(),
-                'total_follow_ups': calls.filter(call_outcome='Follow Up').count(),
-                'contacted': calls.filter(call_status='contacted').count(),
-                'not_contacted': calls.filter(call_status='not_contacted').count(),
-                'answered': calls.filter(call_status='answered').count(),
-                'not_answered': calls.filter(call_status='Not Answered').count(),
-                'walk_in_list': calls.filter(call_outcome='walk_in_list').count(),
-                'positive': calls.filter(call_outcome__in=['Interested', 'Converted']).count(),
-                'negative': calls.filter(call_outcome__in=['Not Interested', 'Do Not Call']).count(),
-            }
-
-            response_data.append(summary)
-
-        return self.get_paginated_response(response_data)
-
-
 class AdminJobsView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
