@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from django.db.models import Q
 from tellecaller.models import Telecaller
 from .models import Enquiry, Mettad, Course, Service
-from .serializers import EnquirySerializer, MettadSerializer, CourseSerializer, ServiceSerializer
+from .serializers import EnquirySerializer, MettadSerializer, CourseSerializer, ServiceSerializer,ChecklistSerializer
 from rest_framework.permissions import IsAuthenticated
 from datetime import datetime
 from rest_framework import status
@@ -30,6 +30,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 import requests
+from .models import checklist  # Import the Checklist model
+from django.core.exceptions import ValidationError
 
 # ✅ Pagination
 class LeadsPagination(PageNumberPagination):
@@ -696,3 +698,64 @@ class MetaConversionAPIView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+class ChecklistListCreateView(ListCreateAPIView):
+    queryset = checklist.objects.all().order_by('name')
+    serializer_class = ChecklistSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [drf_filters.SearchFilter]
+    search_fields = ['name']
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            "code": 200,
+            "message": "Checklist items fetched successfully",
+            "data": serializer.data,
+            "total": queryset.count()
+        })
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response({
+            "code": 201,
+            "message": "Checklist item created successfully",
+            "data": serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+
+class ChecklistDetailView(RetrieveUpdateDestroyAPIView):
+    queryset = checklist.objects.all()
+    serializer_class = ChecklistSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response({
+            "code": 200,
+            "message": "Checklist item details fetched successfully",
+            "data": serializer.data
+        })
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response({
+            "code": 200,
+            "message": "Checklist item updated successfully",
+            "data": serializer.data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response({
+            "code": 200,
+            "message": "Checklist item deleted successfully"
+        }, status=status.HTTP_200_OK)

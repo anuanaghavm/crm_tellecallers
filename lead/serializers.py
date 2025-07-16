@@ -1,6 +1,5 @@
-# serializers.py
 from rest_framework import serializers
-from .models import Enquiry, Mettad, Course, Service
+from .models import Enquiry, Mettad, Course, Service, checklist  # Renamed to capital 'Checklist'
 from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
@@ -27,10 +26,14 @@ class ServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = ['id', 'name', 'is_active', 'created_at']
 
-# Updated EnquirySerializer with Course and Service integration
+class ChecklistSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = checklist
+        fields = ['id', 'name']
+
 class EnquirySerializer(serializers.ModelSerializer):
     assigned_by_id = serializers.PrimaryKeyRelatedField(
-        queryset=Telecaller.objects.all(), source='assigned_by', write_only=True, required=False
+        queryset=Telecaller.objects.all(), source='assigned_by', required=False
     )
     assigned_by_name = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
@@ -54,6 +57,12 @@ class EnquirySerializer(serializers.ModelSerializer):
     preferred_course_name = serializers.SerializerMethodField()
     required_service_name = serializers.SerializerMethodField()
 
+    # Checklist
+    checklist_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=checklist.objects.all(), source='checklist', write_only=True, required=False
+    )
+    checklist = ChecklistSerializer(many=True, read_only=True)
+
     class Meta:
         model = Enquiry
         fields = [
@@ -66,26 +75,50 @@ class EnquirySerializer(serializers.ModelSerializer):
             'follow_up_on',
             'enquiry_status',
             'created_at',
-            
-            # Role-based logic
+
+            # Role-related
             'created_by_role',
             'created_by_name',
             'assigned_by_id',
             'assigned_by_name',
             'branch_name',
-            
-            # Mettad fields
+
+            # Mettad
             'mettad_id',
             'mettad_name',
-            
-            # Course fields
+
+            # Course & Service
             'preferred_course_id',
             'preferred_course_name',
-            
-            # Service fields
             'required_service_id',
             'required_service_name',
+
+            # Checklist
+            'checklist_ids',
+            'checklist',
         ]
+
+    def __init__(self, *args, **kwargs):
+        """
+        Custom __init__ to handle dynamic checklistN keys from form-data.
+        """
+        request = kwargs.get('context', {}).get('request')
+        if request and hasattr(request, 'POST'):
+            data = request.POST.copy()  # make mutable
+
+            checklist_ids = []
+            for key in list(data.keys()):
+                if key.startswith('checklist') and key != 'checklist_ids':
+                    value = data.get(key)
+                    if value and value.isdigit():
+                        checklist_ids.append(int(value))
+
+            if checklist_ids:
+                data.setlist('checklist_ids', checklist_ids)
+
+            kwargs['data'] = data
+
+        super().__init__(*args, **kwargs)
 
     def get_created_by_role(self, obj):
         return obj.created_by.role.name if obj.created_by and obj.created_by.role else None
@@ -106,10 +139,10 @@ class EnquirySerializer(serializers.ModelSerializer):
 
     def get_mettad_name(self, obj):
         return obj.Mettad.name if obj.Mettad else None
-    
+
     def get_preferred_course_name(self, obj):
         return obj.preferred_course.name if obj.preferred_course else None
-    
+
     def get_required_service_name(self, obj):
         return obj.required_service.name if obj.required_service else None
 
@@ -123,19 +156,13 @@ class EnquirySerializer(serializers.ModelSerializer):
                     'assigned_by_id': 'assigned_by is required when created_by is Admin.'
                 })
         else:
-            # Auto-assign the same telecaller as assigned_by
             telecaller = Telecaller.objects.filter(account=request_user).first()
             if telecaller:
                 data['assigned_by'] = telecaller
             else:
                 raise serializers.ValidationError("Only telecallers can create enquiry without assigning manually.")
-
         return data
 
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user
         return super().create(validated_data)
-    
-
-
-

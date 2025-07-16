@@ -15,7 +15,9 @@ from .views import (
     ServiceDetailView,
     EnquiryImportAPIView,
     ActiveServiceListView,
-    MetaConversionAPIView
+    ChecklistListCreateView,
+    MetaConversionAPIView,
+    ChecklistDetailView
 )
 
 urlpatterns = [
@@ -35,6 +37,8 @@ urlpatterns = [
     path('enquiries/import/', EnquiryImportAPIView.as_view(), name='enquiry-import'),
     path('meta-conversion/', MetaConversionAPIView.as_view(), name='meta-conversion'),
 
+    path('checklists/', ChecklistListCreateView.as_view(), name='checklist-list'),
+    path('checklists/<int:pk>/', ChecklistDetailView.as_view(), name='checklist-detail'),
 
     # Mettad URLs
     path('mettads/', MettadListCreateView.as_view(), name='mettad-list-create'),
