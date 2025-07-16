@@ -130,7 +130,7 @@ class TelecallerDashboardView(generics.GenericAPIView):
             'dashboard_type': 'telecaller',
             'total_calls': CallRegister.objects.filter(telecaller=telecaller).count(),
             'total_leads': Enquiry.objects.filter(assigned_by=telecaller).count(),
-            'total_followups': latest_calls.filter(call_outcome='Follow Up').count(),
+            'pending_followups': latest_calls.filter(call_outcome='Follow Up').count(),
             'walkin_list': latest_calls.filter(call_outcome='walk_in_list').count(),
         })
     
