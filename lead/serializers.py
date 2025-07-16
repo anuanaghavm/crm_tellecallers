@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Enquiry, Mettad, Course, Service, checklist  # Renamed to capital 'Checklist'
+from .models import Enquiry, Mettad, Course, Service, checklist
 from branch.models import Branch
 from login.models import Account
 from tellecaller.models import Telecaller
@@ -101,9 +101,20 @@ class EnquirySerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         """
         Custom __init__ to handle dynamic checklistN keys from form-data.
+        Only process POST data when 'data' is provided and request method is POST.
         """
         request = kwargs.get('context', {}).get('request')
-        if request and hasattr(request, 'POST'):
+        
+        # Only process form data if:
+        # 1. We have a request object
+        # 2. The request method is POST/PUT/PATCH (not GET)
+        # 3. 'data' is provided in kwargs (indicating this is for writing, not reading)
+        if (request and 
+            hasattr(request, 'method') and 
+            request.method in ['POST', 'PUT', 'PATCH'] and 
+            'data' in kwargs and
+            hasattr(request, 'POST')):
+            
             data = request.POST.copy()  # make mutable
 
             checklist_ids = []
