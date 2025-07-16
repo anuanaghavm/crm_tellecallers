@@ -13,6 +13,8 @@ from lead.serializers import Enquiry
 from lead.serializers import EnquirySerializer
 from rest_framework import generics,status
 from rest_framework.generics import ListAPIView
+from django.db.models import Max
+from django.utils.dateparse import parse_date
 
 
 class NotificationPagination(PageNumberPagination):
@@ -96,49 +98,37 @@ class TelecallerRemindersView(APIView):
 class TelecallerDashboardView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get_latest_calls_per_enquiry(self, telecaller):
-        """
-        Returns the latest call per enquiry for the given telecaller using Subquery.
-        Compatible across all DBs.
-        """
-        latest_call_subquery = CallRegister.objects.filter(
-            enquiry=OuterRef('enquiry'),
-            telecaller=telecaller
-        ).order_by('-call_start_time', '-created_at')
-
-        return CallRegister.objects.filter(
-            id__in=Subquery(latest_call_subquery.values('id')[:1])
+    def get_latest_calls_per_enquiry_queryset(self, telecaller):
+        latest_calls_map = (
+            CallRegister.objects
+            .filter(telecaller=telecaller)
+            .values('enquiry_id')
+            .annotate(latest_call_id=Max('id'))  # or Max('created_at') if preferred
+            .values_list('latest_call_id', flat=True)
         )
+        return CallRegister.objects.filter(id__in=list(latest_calls_map))
 
     def get(self, request):
         user = request.user
 
         if user.role and user.role.name == 'Admin':
-            total_calls = CallRegister.objects.count()
-            total_leads = Enquiry.objects.count()
-            total_telecallers = Telecaller.objects.count()
-
             return Response({
                 'dashboard_type': 'admin',
-                'total_calls': total_calls,
-                'total_leads': total_leads,
-                'total_telecallers': total_telecallers,
+                'total_calls': CallRegister.objects.count(),
+                'total_leads': Enquiry.objects.count(),
+                'total_telecallers': Telecaller.objects.count(),
             })
 
-        # For Telecaller
         try:
             telecaller = Telecaller.objects.get(account=user)
         except Telecaller.DoesNotExist:
-            return Response(
-                {'error': 'Only telecallers can access dashboard.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': 'Only telecallers can access dashboard.'}, status=403)
 
-        latest_calls = self.get_latest_calls_per_enquiry(telecaller)
+        latest_calls = self.get_latest_calls_per_enquiry_queryset(telecaller)
 
         return Response({
             'dashboard_type': 'telecaller',
-            'total_calls': CallRegister.objects.filter(telecaller=telecaller).count(),  # All calls
+            'total_calls': CallRegister.objects.filter(telecaller=telecaller).count(),
             'total_leads': Enquiry.objects.filter(assigned_by=telecaller).count(),
             'total_followups': latest_calls.filter(call_outcome='Follow Up').count(),
             'walkin_list': latest_calls.filter(call_outcome='walk_in_list').count(),
@@ -149,15 +139,28 @@ class TelecallerCallSummaryView(ListAPIView):
     pagination_class = NotificationPagination
     serializer_class = CallRegisterSerializer
 
-    def get_latest_calls_per_enquiry(self, telecaller):
-        latest_call_subquery = CallRegister.objects.filter(
-            enquiry=OuterRef('enquiry'),
-            telecaller=telecaller
-        ).order_by('-call_start_time', '-created_at')
+    def get_latest_calls_per_enquiry(self, telecaller, start_date=None, end_date=None):
+        calls_qs = CallRegister.objects.filter(telecaller=telecaller)
 
-        return CallRegister.objects.filter(
-            id__in=Subquery(latest_call_subquery.values('id')[:1])
+        # ✅ Apply date filtering ONLY if dates are given
+        if start_date and end_date:
+            calls_qs = calls_qs.filter(created_at__date__range=(start_date, end_date))
+        elif start_date:
+            calls_qs = calls_qs.filter(created_at__date__gte=start_date)
+        elif end_date:
+            calls_qs = calls_qs.filter(created_at__date__lte=end_date)
+
+        # ✅ Always return latest call per enquiry from the (possibly filtered) list
+        latest_calls_map = (
+            calls_qs
+            .values('enquiry_id')
+            .annotate(latest_call_id=Max('id'))
+            .values_list('latest_call_id', flat=True)
         )
+
+        return CallRegister.objects.filter(id__in=list(latest_calls_map))
+
+
 
     def get_queryset(self):
         user = self.request.user
@@ -166,6 +169,8 @@ class TelecallerCallSummaryView(ListAPIView):
 
         report_type = self.request.query_params.get("report", "").lower()
         telecaller_id = self.request.query_params.get("telecaller_id")
+        start_date = parse_date(self.request.query_params.get("start_date", ""))
+        end_date = parse_date(self.request.query_params.get("end_date", ""))
 
         if report_type and telecaller_id:
             try:
@@ -173,8 +178,9 @@ class TelecallerCallSummaryView(ListAPIView):
             except Telecaller.DoesNotExist:
                 return CallRegister.objects.none()
 
-            latest_calls = self.get_latest_calls_per_enquiry(telecaller)
+            latest_calls = self.get_latest_calls_per_enquiry(telecaller, start_date, end_date)
 
+            # Filter based on report type
             if report_type == "contacted":
                 return latest_calls.filter(call_status='contacted')
             elif report_type == "not_contacted":
@@ -191,14 +197,22 @@ class TelecallerCallSummaryView(ListAPIView):
                 return latest_calls.filter(call_outcome__in=['Interested', 'Converted'])
             elif report_type == "negative":
                 return latest_calls.filter(call_outcome__in=['Not Interested', 'Do Not Call'])
-            else:
-                return CallRegister.objects.none()
+            elif report_type == "totalcalls":
+                all_calls = CallRegister.objects.filter(telecaller=telecaller)
+                if start_date and end_date:
+                    all_calls = all_calls.filter(created_at__date__range=(start_date, end_date))
+                elif start_date:
+                    all_calls = all_calls.filter(created_at__date__gte=start_date)
+                elif end_date:
+                    all_calls = all_calls.filter(created_at__date__lte=end_date)
+                return all_calls
 
-        return CallRegister.objects.none()
 
     def list(self, request, *args, **kwargs):
         report_type = self.request.query_params.get("report", "").lower()
         telecaller_id = self.request.query_params.get("telecaller_id")
+        start_date = parse_date(self.request.query_params.get("start_date", ""))
+        end_date = parse_date(self.request.query_params.get("end_date", ""))
 
         if report_type and telecaller_id:
             return super().list(request, *args, **kwargs)
@@ -225,13 +239,24 @@ class TelecallerCallSummaryView(ListAPIView):
 
         for telecaller in queryset:
             all_calls = CallRegister.objects.filter(telecaller=telecaller)
-            latest_calls = self.get_latest_calls_per_enquiry(telecaller)
+            latest_calls = self.get_latest_calls_per_enquiry(telecaller, start_date, end_date)
+
+            if not latest_calls.exists():
+                continue  # ✅ Valid here — inside the loop
+
+            # Optional: filter total_calls by date
+            if start_date and end_date:
+                all_calls = all_calls.filter(created_at__date__range=(start_date, end_date))
+            elif start_date:
+                all_calls = all_calls.filter(created_at__date__gte=start_date)
+            elif end_date:
+                all_calls = all_calls.filter(created_at__date__lte=end_date)
 
             summary = {
                 "telecaller_id": telecaller.id,
                 "telecaller_name": telecaller.name,
                 "branch_name": telecaller.branch.branch_name if telecaller.branch else None,
-                "total_calls": all_calls.count(),  # Includes all calls
+                "total_calls": all_calls.count(),
                 "total_follow_ups": latest_calls.filter(call_outcome='Follow Up').count(),
                 "contacted": latest_calls.filter(call_status='contacted').count(),
                 "not_contacted": latest_calls.filter(call_status='not_contacted').count(),
