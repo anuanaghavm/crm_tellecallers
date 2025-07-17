@@ -5,7 +5,7 @@ from .views import (
     TelecallerCallStatsView,
     FollowUpCallsView,
     WalkInListView,
-    CallOutcomeFilterView,AdminJobsView,NotAnsweredCallsView,TelecallerJobsView,EnquiryCallHistoryView
+    CallOutcomeFilterView,AdminJobsView,NotAnsweredCallsView,TelecallerJobsView,EnquiryCallHistoryView,InterestedCallsView
 )
 
 urlpatterns = [
@@ -23,5 +23,7 @@ urlpatterns = [
     path('calls/walk-in-list/', WalkInListView.as_view(), name='walk-in-list'),
     path('calls/outcome/<str:outcome>/', CallOutcomeFilterView.as_view(), name='call-outcome-filter'),
     path('jobs-view/',AdminJobsView.as_view(),name="admin-telecallers-jobs"),
-    path('jobs-summary/',TelecallerJobsView.as_view(),name="telecallers-job-view")
+    path('jobs-summary/',TelecallerJobsView.as_view(),name="telecallers-job-view"),
+    path('calls/interested/', InterestedCallsView.as_view(), name='interested-calls'),
+
 ]
