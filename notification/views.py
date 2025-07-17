@@ -98,19 +98,32 @@ class TelecallerRemindersView(APIView):
 class TelecallerDashboardView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get_latest_calls_per_enquiry_queryset(self, telecaller):
-        latest_calls_map = (
+    def get_enquiries_with_latest_call_status(self, telecaller):
+        """
+        Annotate each enquiry assigned to the telecaller with the latest call outcome
+        (regardless of which telecaller made the call).
+        """
+        latest_call_subquery = (
             CallRegister.objects
-            .filter(telecaller=telecaller)
-            .values('enquiry_id')
-            .annotate(latest_call_id=Max('id'))  # or Max('created_at') if preferred
-            .values_list('latest_call_id', flat=True)
+            .filter(enquiry_id=OuterRef('pk'))
+            .order_by('-created_at')  # Use '-id' if 'created_at' not available
         )
-        return CallRegister.objects.filter(id__in=list(latest_calls_map))
+
+        # Only get enquiries assigned to the logged-in telecaller
+        enquiries_with_latest = (
+            Enquiry.objects
+            .filter(assigned_by=telecaller)
+            .annotate(
+                latest_call_outcome=Subquery(latest_call_subquery.values('call_outcome')[:1])
+            )
+        )
+
+        return enquiries_with_latest
 
     def get(self, request):
         user = request.user
 
+        # Admin dashboard logic
         if user.role and user.role.name == 'Admin':
             return Response({
                 'dashboard_type': 'admin',
@@ -119,19 +132,25 @@ class TelecallerDashboardView(generics.GenericAPIView):
                 'total_telecallers': Telecaller.objects.count(),
             })
 
+        # Telecaller dashboard logic
         try:
             telecaller = Telecaller.objects.get(account=user)
         except Telecaller.DoesNotExist:
             return Response({'error': 'Only telecallers can access dashboard.'}, status=403)
 
-        latest_calls = self.get_latest_calls_per_enquiry_queryset(telecaller)
+        # Enquiries assigned to telecaller with latest call outcome
+        enquiries = self.get_enquiries_with_latest_call_status(telecaller)
+
+        # Count based on latest call outcome
+        pending_followups = enquiries.filter(latest_call_outcome='Follow Up').count()
+        walkin_list = enquiries.filter(latest_call_outcome='walk_in_list').count()
 
         return Response({
             'dashboard_type': 'telecaller',
             'total_calls': CallRegister.objects.filter(telecaller=telecaller).count(),
-            'total_leads': Enquiry.objects.filter(assigned_by=telecaller).count(),
-            'pending_followups': latest_calls.filter(call_outcome='Follow Up').count(),
-            'walkin_list': latest_calls.filter(call_outcome='walk_in_list').count(),
+            'total_leads': enquiries.count(),  # Count of active enquiries assigned
+            'pending_followups': pending_followups,
+            'walkin_list': walkin_list,
         })
     
 class TelecallerCallSummaryView(ListAPIView):
@@ -159,8 +178,6 @@ class TelecallerCallSummaryView(ListAPIView):
         )
 
         return CallRegister.objects.filter(id__in=list(latest_calls_map))
-
-
 
     def get_queryset(self):
         user = self.request.user

@@ -115,7 +115,7 @@ class TelecallerDetailView(APIView):
                 "message": "Telecaller not found"
             }, status=status.HTTP_404_NOT_FOUND)
 
-        telecaller.delete()  # ✅ This calls your custom delete method
+        telecaller.delete()  
 
         return Response({
             "code": 204,
