@@ -214,6 +214,8 @@ class TelecallerCallSummaryView(ListAPIView):
                 return latest_calls.filter(call_outcome__in=['Interested', 'Converted'])
             elif report_type == "negative":
                 return latest_calls.filter(call_outcome__in=['Not Interested', 'Do Not Call'])
+            elif report_type == "won":
+                return latest_calls.filter(call_outcome__in=['Won'])
             elif report_type == "totalcalls":
                 all_calls = CallRegister.objects.filter(telecaller=telecaller)
                 if start_date and end_date:
@@ -277,10 +279,10 @@ class TelecallerCallSummaryView(ListAPIView):
                 "total_follow_ups": latest_calls.filter(call_outcome='Follow Up').count(),
                 "contacted": latest_calls.filter(call_status='contacted').count(),
                 "not_contacted": latest_calls.filter(call_status='not_contacted').count(),
-                "answered": latest_calls.filter(call_status='answered').count(),
+                "answered": latest_calls.filter(call_status='Answered').count(),
                 "not_answered": latest_calls.filter(call_status='Not Answered').count(),
                 "walk_in_list": latest_calls.filter(call_outcome='walk_in_list').count(),
-                "won": latest_calls.filter(call_outcome='won').count(),
+                "won": latest_calls.filter(call_outcome='Won').count(),
                 "not_intrested": latest_calls.filter(call_outcome__in=['Not Interested', 'Do Not Call']).count(),
             }
 
