@@ -31,6 +31,8 @@ class CallRegister(models.Model):
         ('Do Not Call', 'Do Not Call'),
         ('walk_in_list', 'walk_in_list'),
         ('closed', 'closed'),
+        ('Won', 'Won'),
+        ('Answered', 'Answered'),
     ]
 
     enquiry = models.ForeignKey(Enquiry, on_delete=models.CASCADE, related_name='call_logs')
