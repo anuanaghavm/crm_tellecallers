@@ -64,14 +64,16 @@ class EnquiryBaseFilter(django_filters.FilterSet):
     telecaller = django_filters.NumberFilter(field_name='assigned_by')
     telecaller_name = django_filters.CharFilter(field_name='assigned_by__name', lookup_expr='icontains')
     enquiry_status = django_filters.CharFilter(field_name='enquiry_status', lookup_expr='iexact')
-    
+    candidate_name = django_filters.CharFilter(field_name='candidate_name', lookup_expr='icontains')
+    phone = django_filters.CharFilter(field_name='phone', lookup_expr='icontains')
+
     # Mettad filters
     mettad = django_filters.NumberFilter(field_name='Mettad')
     mettad_name = django_filters.CharFilter(field_name='Mettad__name', lookup_expr='icontains')
 
     class Meta:
         model = Enquiry
-        fields = ['enquiry_source', 'branch', 'branch_name', 'telecaller', 'telecaller_name', 
+        fields = ['enquiry_source', 'branch', 'branch_name', 'telecaller', 'telecaller_name', 'candidate_name','phone',
                  'enquiry_status', 'start_date', 'end_date', 'mettad', 'mettad_name']
 
 # ✅ Base View (Updated search fields)
@@ -80,8 +82,8 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = LeadsPagination
     filterset_class = EnquiryBaseFilter
-
     filter_backends = [DjangoFilterBackend, drf_filters.SearchFilter]
+
     search_fields = [
         'candidate_name',
         'email',
@@ -94,7 +96,6 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
     def get_queryset(self):
         user = self.request.user
         role = getattr(user.role, 'name', None)
-
         queryset = Enquiry.objects.all()
 
         # ✅ Filter assigned enquiries for non-admin users
@@ -105,58 +106,41 @@ class BaseEnquiryListCreateView(ListCreateAPIView):
             else:
                 return Enquiry.objects.none()
 
-        # ✅ Filter by enquiry_status if set on the class
+        # ✅ Filter by enquiry_status if present on the view
         enquiry_status = getattr(self, 'enquiry_status', None)
         if enquiry_status:
             queryset = queryset.filter(enquiry_status=enquiry_status)
 
         return queryset.select_related('Mettad', 'assigned_by__branch').order_by('-created_at')
 
-    def perform_create(self, serializer):
-        if self.enquiry_status and not serializer.validated_data.get('enquiry_status'):
-            serializer.save(
-                created_by=self.request.user,
-                enquiry_status=self.enquiry_status
-            )
-        else:
-            serializer.save(created_by=self.request.user)
+    def filter_queryset(self, queryset):
+        # Apply default filtering (from EnquiryBaseFilter and SearchFilter)
+        queryset = super().filter_queryset(queryset)
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        # ✅ Custom Date Range Filtering Logic
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
 
-        return Response({
-            "code": 201,
-            "message": f"{'Enquiry' if not self.enquiry_status else self.enquiry_status.replace('_', ' ').title()} created successfully",
-            "data": serializer.data
-        }, status=status.HTTP_201_CREATED)
+        filters = Q()
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+        if start_date:
+            try:
+                start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                filters &= Q(created_at__gte=start)
+            except ValueError:
+                return Enquiry.objects.none()  # or raise ValidationError if preferred
 
-        if request.query_params.get('no_pagination', '').lower() in ['true', '1']:
-            serializer = self.get_serializer(queryset, many=True)
-            return Response({
-                "code": 200,
-                "message": "Data fetched successfully",
-                "data": serializer.data,
-                "total": queryset.count()
-            })
+        if end_date:
+            try:
+                end = datetime.strptime(end_date, '%Y-%m-%d').date()
+                filters &= Q(created_at__lte=end)
+            except ValueError:
+                return Enquiry.objects.none()
 
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+        if filters:
+            queryset = queryset.filter(filters)
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            "code": 200,
-            "message": "Data fetched successfully",
-            "data": serializer.data,
-            "total": queryset.count()
-        })
-
+        return queryset
 
 # ✅ Mettad List/Create View
 class MettadListCreateView(ListCreateAPIView):
@@ -759,3 +743,8 @@ class ChecklistDetailView(RetrieveUpdateDestroyAPIView):
             "code": 200,
             "message": "Checklist item deleted successfully"
         }, status=status.HTTP_200_OK)
+
+
+
+
+
