@@ -17,13 +17,10 @@ class Telecaller(models.Model):
     created_by = models.ForeignKey(Account, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_telecallers')
 
     def delete(self, *args, **kwargs):
-        print("Telecaller delete called — also deleting account.")
         account = self.account
-        super().delete(*args, **kwargs)
         if account:
             account.delete()
-
-
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return self.name
