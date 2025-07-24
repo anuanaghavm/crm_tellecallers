@@ -17,7 +17,6 @@ from collections import defaultdict
 from datetime import datetime
 from rest_framework.views import APIView
 from django.db.models import Q  
-from rest_framework.exceptions import ValidationError
 # ✅ Custom Pagination Class
 class callsPagination(PageNumberPagination):
     page_size = 10
@@ -711,14 +710,7 @@ class InterestedCallsView(generics.ListAPIView):
     serializer_class = CallRegisterSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = callsPagination
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-
-    search_fields = [
-        'enquiry__candidate_name',
-        'enquiry__phone',
-        'enquiry__email',
-        'notes'
-    ]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
 
     ordering_fields = ['call_start_time', 'created_at', 'follow_up_date']
     ordering = ['-created_at']
@@ -741,6 +733,9 @@ class InterestedCallsView(generics.ListAPIView):
         telecaller_name = query_params.get('telecaller_name', '').strip()
         call_status = query_params.get('call_status', '').strip()
         follow_up_date = query_params.get('follow_up_date', '').strip()
+
+        phone_number = query_params.get('phone_number', '').strip()
+        email = query_params.get('email', '').strip()
 
         # ✅ Date filters
         start_date = query_params.get('start_date', '').strip()
@@ -765,7 +760,6 @@ class InterestedCallsView(generics.ListAPIView):
             except ValueError:
                 pass
 
-        # ✅ Apply date range to created_at
         if start_date:
             try:
                 start = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -780,10 +774,13 @@ class InterestedCallsView(generics.ListAPIView):
             except ValueError:
                 pass
 
+        # ✅ Search by phone_number and email (related to enquiry)
+        if phone_number:
+            filters &= Q(enquiry__phone__icontains=phone_number)
+
+        if email:
+            filters &= Q(enquiry__email__icontains=email)
+
         return CallRegister.objects.select_related(
             'enquiry', 'telecaller', 'telecaller__branch'
         ).filter(filters)
-
-
-
-
