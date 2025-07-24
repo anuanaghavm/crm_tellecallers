@@ -16,7 +16,6 @@ from rest_framework.generics import ListAPIView
 from django.db.models import Max
 from django.utils.dateparse import parse_date
 
-
 class NotificationPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'limit'
@@ -55,39 +54,36 @@ class TelecallerRemindersView(APIView):
                 "enquiry_id": entry.enquiry.id
             }
 
-        if user.role.name == "Admin":
-            today_qs = CallRegister.objects.filter(call_outcome='Follow Up', follow_up_date=today)
-            tomorrow_qs = CallRegister.objects.filter(call_outcome='Follow Up', follow_up_date=tomorrow)
-            in_2_days_qs = CallRegister.objects.filter(call_outcome='Follow Up', follow_up_date=in_2_days)
-            walkin_qs = CallRegister.objects.filter(call_outcome='walk_in_list')
-        else:
+        # Get base queryset
+        base_qs = CallRegister.objects.all()
+
+        # Filter for telecaller if not admin
+        if user.role.name != "Admin":
             try:
                 telecaller = Telecaller.objects.get(account=user)
             except Telecaller.DoesNotExist:
                 return Response({"error": "Only telecallers and admins can access this data."}, status=403)
+            base_qs = base_qs.filter(telecaller=telecaller)
 
-            today_qs = CallRegister.objects.filter(telecaller=telecaller, call_outcome='Follow Up', follow_up_date=today)
-            tomorrow_qs = CallRegister.objects.filter(telecaller=telecaller, call_outcome='Follow Up', follow_up_date=tomorrow)
-            in_2_days_qs = CallRegister.objects.filter(telecaller=telecaller, call_outcome='Follow Up', follow_up_date=in_2_days)
-            walkin_qs = CallRegister.objects.filter(telecaller=telecaller, call_outcome='walk_in_list')
+        # Get only the latest CallRegister entry per enquiry
+        latest_ids = base_qs.values('enquiry').annotate(latest_id=Max('id')).values('latest_id')
+        latest_calls = CallRegister.objects.filter(id__in=Subquery(latest_ids))
 
+        # Filter latest calls by outcome and date
+        filtered_qs = latest_calls.filter(
+            call_outcome__in=['Follow Up', 'walk_in_list'],
+            follow_up_date__in=[today, tomorrow, in_2_days]
+        )
+
+        # Format reminders
         reminders = []
-
-        for entry in today_qs:
-            reminders.append(format_reminder(entry, "Follow-up needed"))
-        for entry in tomorrow_qs:
-            reminders.append(format_reminder(entry, "Follow-up needed"))
-        for entry in in_2_days_qs:
-            reminders.append(format_reminder(entry, "Follow-up needed"))
-        for entry in walkin_qs:
-            reminders.append(format_reminder(entry, "Walk-in scheduled"))
+        for entry in filtered_qs:
+            message = "Walk-in scheduled" if entry.call_outcome == 'walk_in_list' else "Follow-up needed"
+            reminders.append(format_reminder(entry, message))
 
         # Apply search filter
         if search:
-            reminders = [
-                r for r in reminders
-                if search in r["enquiry_name"].lower()
-            ]
+            reminders = [r for r in reminders if search in r["enquiry_name"].lower()]
 
         # Apply pagination
         paginator = NotificationPagination()
